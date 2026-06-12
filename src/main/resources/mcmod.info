@@ -1,0 +1,12 @@
+[{
+  "modid": "cavebiomesapi",
+  "name": "Cave Biomes API",
+  "description": "API for 3D biomes and extended world height in Minecraft 1.12.2.",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "credits": "CelestialD",
+  "authorList": ["CelestialD"],
+  "dependencies": [],
+  "requiredMods": [],
+  "useDependencyInformation": "true"
+}]

@@ -1,0 +1,6 @@
+{
+    "compatibilityLevel": "JAVA_8",
+    "package": "net.celestiald.cavebiomes.mixin",
+    "refmap": "mixins.cavebiomes.refmap.json",
+    "mixins": []
+}
