@@ -23,7 +23,7 @@ compileJava {
 }
 
 minecraft {
-    version = '1.12.2-14.23.5.2864'
+    version = '1.12.2-14.23.5.2768'
     runDir = 'run'
     mappings = 'snapshot_20171003'
     coreMod = 'net.celestiald.cavebiomes.core.CaveBiomesLoadingPlugin'
@@ -39,6 +39,24 @@ dependencies {
 
 mixin {
     add sourceSets.main, 'mixins.cavebiomes.refmap.json'
+}
+
+// The Mixin AP writes the refmap to build/tmp/compileJava but does not place it
+// on the classpath in this FG 2.3 + mixingradle 0.6 setup. Without it, every
+// @Inject / @ModifyConstant / @Redirect fails to remap MCP names to SRG at dev
+// runtime. Copy it into the compiled-classes output so it is on the classpath
+// (and gets packed into the jar).
+task copyMixinRefmap(type: Copy, dependsOn: compileJava) {
+    from "${buildDir}/tmp/compileJava/mixins.cavebiomes.refmap.json"
+    into "${buildDir}/classes/java/main"
+}
+classes.dependsOn copyMixinRefmap
+
+// The refmap then exists both in the classes output (above, for the dev runtime
+// classpath) and as a resource the mixin plugin contributes to the jar, so the
+// packaged jar would contain it twice. Drop the duplicate when packaging.
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 processResources {

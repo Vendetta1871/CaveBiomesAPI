@@ -7,7 +7,6 @@ import org.spongepowered.asm.mixin.Mixins;
 import java.util.Map;
 
 @IFMLLoadingPlugin.MCVersion("1.12.2")
-@IFMLLoadingPlugin.TransformerExclusions("net.celestiald.cavebiomes.mixin")
 @IFMLLoadingPlugin.SortingIndex(1001)
 public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
 
