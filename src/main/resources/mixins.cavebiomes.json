@@ -6,9 +6,15 @@
         "MixinWorld",
         "MixinChunk",
         "MixinAnvilChunkLoader",
-        "MixinChunkGeneratorOverworld"
+        "MixinChunkGeneratorOverworld",
+        "MixinPlayerChunkMapEntry",
+        "MixinSPacketChunkData",
+        "MixinChunkCache",
+        "MixinMinecraftServer"
     ],
     "client": [
-        "MixinChunkClient"
+        "MixinChunkClient",
+        "MixinViewFrustum",
+        "MixinRenderGlobal"
     ]
 }

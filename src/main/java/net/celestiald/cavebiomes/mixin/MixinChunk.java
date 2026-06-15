@@ -32,6 +32,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import javax.annotation.Nullable;
@@ -475,5 +476,24 @@ public abstract class MixinChunk {
         entityIn.chunkCoordZ = this.z;
         this.entityLists[k].add(entityIn);
         this.markDirty();
+    }
+
+    // =========================================================================
+    // Entity AABB queries index entityLists by floor(y/16) (clamped to [0,len)).
+    // addEntity stores entities at floor(y/16) - minSection, so the lookups must
+    // apply the same offset or entities below 0 / above 255 are never found
+    // (e.g. dropped items can't be picked up). Both query methods compute their
+    // section bounds with MathHelper.floor(double); shift every such result down
+    // by minSection here.
+    // =========================================================================
+
+    @Redirect(
+            method = {
+                    "getEntitiesWithinAABBForEntity",
+                    "getEntitiesOfTypeWithinAABB"
+            },
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/util/math/MathHelper;floor(D)I"))
+    private int cavebiomes$entitySectionIndex(double value) {
+        return MathHelper.floor(value) - WorldHeightAPI.getMinSection();
     }
 }

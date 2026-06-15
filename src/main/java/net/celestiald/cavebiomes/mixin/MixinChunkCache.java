@@ -1,0 +1,41 @@
+package net.celestiald.cavebiomes.mixin;
+
+import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.init.Blocks;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.ChunkCache;
+import net.minecraft.world.chunk.Chunk;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
+import org.spongepowered.asm.mixin.Shadow;
+
+/**
+ * ChunkCache (the read-only region used by chunk rendering AND entity path-finding)
+ * returns AIR for any block with y<0 or y>=256. That makes blocks outside [0,256)
+ * render as nothing (see-through) and breaks pathfinding there. Widen the bound to
+ * [minY, maxY). Common (not @SideOnly), so it also fixes the server-side AI cache.
+ */
+@Mixin(ChunkCache.class)
+public abstract class MixinChunkCache {
+
+    @Shadow protected int chunkX;
+    @Shadow protected int chunkZ;
+    @Shadow protected Chunk[][] chunkArray;
+
+    @Overwrite
+    public IBlockState getBlockState(BlockPos pos) {
+        if (pos.getY() >= WorldHeightAPI.getMinY() && pos.getY() < WorldHeightAPI.getMaxY()) {
+            int i = (pos.getX() >> 4) - this.chunkX;
+            int j = (pos.getZ() >> 4) - this.chunkZ;
+
+            if (i >= 0 && i < this.chunkArray.length && j >= 0 && j < this.chunkArray[i].length) {
+                Chunk chunk = this.chunkArray[i][j];
+                if (chunk != null) {
+                    return chunk.getBlockState(pos);
+                }
+            }
+        }
+        return Blocks.AIR.getDefaultState();
+    }
+}
