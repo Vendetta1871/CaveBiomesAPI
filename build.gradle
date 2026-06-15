@@ -80,6 +80,22 @@ classes.dependsOn patchMixinRefmap
 // classpath) and as a resource the mixin plugin contributes to the jar, so the
 // packaged jar would contain it twice. Drop the duplicate when packaging.
 jar {
+    // TweakClass: in a production Forge install the LaunchWrapper reads TweakClass
+    // from mod-jar MANIFESTs and loads MixinTweaker *before* FML coremods run.
+    // That initialises Mixin through the proper channel, so the subsequent
+    // MixinBootstrap.init() call in CaveBiomesLoadingPlugin becomes a no-op and
+    // no "Multiple Mixin containers" warning is printed.
+    // In dev (runClient/runServer via ForgeGradle) the TweakClass is NOT added to
+    // the launch args, so the coremod constructor handles initialisation as usual.
+    manifest {
+        attributes(
+            'FMLCorePlugin': 'net.celestiald.cavebiomes.core.CaveBiomesLoadingPlugin',
+            'FMLCorePluginContainsFMLMod': 'true',
+            'TweakClass': 'org.spongepowered.asm.launch.MixinTweaker',
+            'TweakOrder': '0',
+            'MixinConfigs': 'mixins.cavebiomes.json'
+        )
+    }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
