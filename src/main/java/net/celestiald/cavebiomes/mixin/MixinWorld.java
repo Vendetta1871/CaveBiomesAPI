@@ -2,12 +2,16 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.World;
+import net.minecraft.world.chunk.Chunk;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
@@ -19,6 +23,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(value = World.class, priority = 1001)
 public abstract class MixinWorld {
+
+    @Shadow public abstract boolean isBlockLoaded(BlockPos pos);
+    @Shadow public abstract Chunk getChunkFromBlockCoords(BlockPos pos);
+    @Shadow public abstract void notifyLightSet(BlockPos pos);
 
     // =========================================================================
     // World height: vanilla World.getHeight()/getActualHeight() hardcode 256.
@@ -46,10 +54,19 @@ public abstract class MixinWorld {
         cir.setReturnValue(pos.getY() < WorldHeightAPI.getMinY() || pos.getY() >= WorldHeightAPI.getMaxY());
     }
 
-    // isAreaLoaded(int,int,int,int,int,int,boolean): upper Y guard 256 -> maxY.
+    // isAreaLoaded(int,int,int,int,int,int,boolean): vanilla checks `toY >= 0 && fromY < 256`.
+    // Extend both sides: 256 -> maxY, and `>= 0` -> `>= minY`. Without the lower fix,
+    // checkLightFor at Y < -17 calls isAreaLoaded(pos, 17) whose toY = pos.Y+17 < 0,
+    // so isAreaLoaded returns false immediately and the BFS never runs -> no light propagation.
     @ModifyConstant(method = "isAreaLoaded(IIIIIIZ)Z", constant = @Constant(intValue = 256))
     private int fixAreaLoadedMaxY(int original) {
         return WorldHeightAPI.getMaxY();
+    }
+
+    @ModifyConstant(method = "isAreaLoaded(IIIIIIZ)Z",
+            constant = @Constant(intValue = 0, expandZeroConditions = Constant.Condition.GREATER_THAN_OR_EQUAL_TO_ZERO))
+    private int fixAreaLoadedMinY(int original) {
+        return WorldHeightAPI.getMinY();
     }
 
     // =========================================================================
@@ -82,8 +99,50 @@ public abstract class MixinWorld {
         if (pos.getY() < WorldHeightAPI.getMinY()) cir.setReturnValue(0);
     }
 
-    // (No lower clamp on getLightFor / getLightFromNeighborsFor: vanilla already
-    // handles y < 0 safely, and below-minY light is a cosmetic edge case.)
+    // getLightFor: vanilla clamps Y<0 to Y=0 and rejects Y>=256 via isValid(pos).
+    // Both prevent the BFS in checkLightFor from reading correct stored values at
+    // extended-range positions, breaking light propagation outside [0,256).
+    @Inject(method = "getLightFor", at = @At("HEAD"), cancellable = true)
+    private void fixGetLightFor(EnumSkyBlock type, BlockPos pos,
+                                 CallbackInfoReturnable<Integer> cir) {
+        int y = pos.getY();
+        if (y >= 0 && y < 256) return;
+        if (y < WorldHeightAPI.getMinY() || y >= WorldHeightAPI.getMaxY()) {
+            cir.setReturnValue(type.defaultLightValue);
+            return;
+        }
+        if (!this.isBlockLoaded(pos)) { cir.setReturnValue(type.defaultLightValue); return; }
+        cir.setReturnValue(this.getChunkFromBlockCoords(pos).getLightFor(type, pos));
+    }
+
+    // setLightFor: vanilla guards with isValid(pos) → isInvalid() → true for Y<0 or Y>=256.
+    // The BFS never writes light values outside [0,256), so chunk arrays stay at 0 (darkness).
+    @Inject(method = "setLightFor", at = @At("HEAD"), cancellable = true)
+    private void fixSetLightFor(EnumSkyBlock type, BlockPos pos, int lightValue, CallbackInfo ci) {
+        int y = pos.getY();
+        if (y >= 0 && y < 256) return;
+        if (y >= WorldHeightAPI.getMinY() && y < WorldHeightAPI.getMaxY()
+                && this.isBlockLoaded(pos)) {
+            this.getChunkFromBlockCoords(pos).setLightFor(type, pos, lightValue);
+            this.notifyLightSet(pos);
+        }
+        ci.cancel();
+    }
+
+    // getLightFromNeighborsFor: same Y<0 clamp + isValid guard as getLightFor.
+    // Used by World.getCombinedLight for entity lighting in extended Y range.
+    @Inject(method = "getLightFromNeighborsFor", at = @At("HEAD"), cancellable = true)
+    private void fixGetLightFromNeighborsFor(EnumSkyBlock type, BlockPos pos,
+                                              CallbackInfoReturnable<Integer> cir) {
+        int y = pos.getY();
+        if (y >= 0 && y < 256) return;
+        if (y < WorldHeightAPI.getMinY() || y >= WorldHeightAPI.getMaxY()) {
+            cir.setReturnValue(type.defaultLightValue);
+            return;
+        }
+        if (!this.isBlockLoaded(pos)) { cir.setReturnValue(type.defaultLightValue); return; }
+        cir.setReturnValue(this.getChunkFromBlockCoords(pos).getLightFor(type, pos));
+    }
 
     // =========================================================================
     // Snow / ice formation Y range (vanilla hardcodes 256)

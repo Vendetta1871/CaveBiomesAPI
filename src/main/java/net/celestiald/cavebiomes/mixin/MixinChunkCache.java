@@ -15,6 +15,9 @@ import org.spongepowered.asm.mixin.Shadow;
  * returns AIR for any block with y<0 or y>=256. That makes blocks outside [0,256)
  * render as nothing (see-through) and breaks pathfinding there. Widen the bound to
  * [minY, maxY). Common (not @SideOnly), so it also fixes the server-side AI cache.
+ *
+ * The render-light methods getLightFor/getLightForExt are @SideOnly(CLIENT) (stripped
+ * on a dedicated server), so their fix lives in {@link MixinChunkCacheClient}.
  */
 @Mixin(ChunkCache.class)
 public abstract class MixinChunkCache {

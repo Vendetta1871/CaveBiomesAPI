@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.celestiald.cavebiomes.client.IViewFrustumExt;
 import net.minecraft.client.renderer.ViewFrustum;
 import net.minecraft.client.renderer.chunk.RenderChunk;
 import net.minecraft.util.math.BlockPos;
@@ -23,7 +24,7 @@ import javax.annotation.Nullable;
  * minSection. @SideOnly(CLIENT) — listed under "client" in the mixin config.
  */
 @Mixin(ViewFrustum.class)
-public abstract class MixinViewFrustum {
+public abstract class MixinViewFrustum implements IViewFrustumExt {
 
     @Shadow protected int countChunksY;
     @Shadow protected int countChunksX;
@@ -44,6 +45,13 @@ public abstract class MixinViewFrustum {
                     target = "Lnet/minecraft/client/renderer/chunk/RenderChunk;setPosition(III)V"))
     private void cavebiomes$shiftRowY(RenderChunk renderChunk, int x, int y, int z) {
         renderChunk.setPosition(x, y + WorldHeightAPI.getMinY(), z);
+    }
+
+    // Public bridge so MixinRenderGlobal (different package) can reach the
+    // protected getRenderChunk after this mixin is applied. See IViewFrustumExt.
+    @Override
+    public RenderChunk cavebiomes$getRenderChunk(BlockPos pos) {
+        return this.getRenderChunk(pos);
     }
 
     @Nullable

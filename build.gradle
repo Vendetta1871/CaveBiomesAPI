@@ -50,7 +50,31 @@ task copyMixinRefmap(type: Copy, dependsOn: compileJava) {
     from "${buildDir}/tmp/compileJava/mixins.cavebiomes.refmap.json"
     into "${buildDir}/classes/java/main"
 }
-classes.dependsOn copyMixinRefmap
+
+// The Mixin AP cannot resolve certain World methods to SRG names (getLightFor,
+// setLightFor, getLightFromNeighborsFor) — refmap entries are absent after AP
+// runs. Patch them in manually using SRG names from mcp-srg.srg so that
+// @Inject in MixinWorld finds its targets in a reobfuscated production jar.
+task patchMixinRefmap(dependsOn: copyMixinRefmap) {
+    def refmapPath = "${buildDir}/classes/java/main/mixins.cavebiomes.refmap.json"
+    outputs.file refmapPath
+    doLast {
+        def refmapFile = new File(refmapPath)
+        if (refmapFile.exists()) {
+            def refmap = new groovy.json.JsonSlurper().parse(refmapFile)
+            def mixin = "net/celestiald/cavebiomes/mixin/MixinWorld"
+            if (!refmap.mappings.containsKey(mixin)) refmap.mappings[mixin] = [:]
+            def sky = "Lnet/minecraft/world/EnumSkyBlock;"
+            def pos = "Lnet/minecraft/util/math/BlockPos;"
+            def W = "Lnet/minecraft/world/World;"
+            refmap.mappings[mixin]["getLightFor(${sky}${pos})I"]             = "${W}func_175642_b(${sky}${pos})I"
+            refmap.mappings[mixin]["setLightFor(${sky}${pos}I)V"]            = "${W}func_175653_a(${sky}${pos}I)V"
+            refmap.mappings[mixin]["getLightFromNeighborsFor(${sky}${pos})I"] = "${W}func_175705_a(${sky}${pos})I"
+            refmapFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(refmap))
+        }
+    }
+}
+classes.dependsOn patchMixinRefmap
 
 // The refmap then exists both in the classes output (above, for the dev runtime
 // classpath) and as a resource the mixin plugin contributes to the jar, so the
