@@ -10,7 +10,7 @@ If you've ever wanted to create massive underground ecosystems with different bi
 * **Developer-Friendly:** Provides a clean and accessible API to integrate complex underground world generation into your own mods.
 
 ## Requirements & Dependencies
-This mod requires **[MixinBooter](https://www.curseforge.com/minecraft/mc-mods/mixinbooter)** to work. 
+This mod requires **[MixinBootstrap](https://www.curseforge.com/minecraft/mc-mods/mixinbootstrap)** to work. 
 
 ## For Developers
 *(You can add instructions here on how to implement the API via Gradle, code examples, or a link to a Wiki).*
