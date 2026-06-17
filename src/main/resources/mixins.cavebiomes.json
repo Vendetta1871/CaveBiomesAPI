@@ -5,8 +5,10 @@
     "mixins": [
         "MixinWorld",
         "MixinChunk",
+        "MixinChunkBiome",
         "MixinAnvilChunkLoader",
         "MixinChunkGeneratorOverworld",
+        "MixinChunkGeneratorBiome",
         "MixinPlayerChunkMapEntry",
         "MixinSPacketChunkData",
         "MixinChunkCache",
