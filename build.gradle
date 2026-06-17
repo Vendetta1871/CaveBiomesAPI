@@ -12,6 +12,7 @@ buildscript {
 
 apply plugin: 'net.minecraftforge.gradle.forge'
 apply plugin: 'org.spongepowered.mixin'
+apply plugin: 'maven-publish'
 
 version = "0.1.0"
 group = "net.celestiald"
@@ -117,3 +118,18 @@ runClient {
 
 runClient.outputs.upToDateWhen { false }
 runServer.outputs.upToDateWhen { false }
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId    = project.group
+            artifactId = project.archivesBaseName
+            version    = project.version
+            artifact jar
+            artifact sourceJar { classifier 'sources' }
+        }
+    }
+    repositories {
+        mavenLocal()
+    }
+}
