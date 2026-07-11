@@ -15,6 +15,7 @@
         "MixinBlockDragonEgg",
         "MixinBlockPortalSize",
         "MixinEntity",
+        "MixinEntityLivingBase",
         "MixinEntityMinecart",
         "MixinEntityFallingBlock",
         "MixinChunk",
