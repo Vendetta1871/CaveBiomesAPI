@@ -29,7 +29,8 @@
         "MixinChunkCache",
         "MixinMinecraftServer",
         "MixinTeleporter",
-        "MixinWorldEntitySpawner"
+        "MixinWorldEntitySpawner",
+        "MixinTileEntityBeacon"
     ],
     "client": [
         "MixinChunkClient",
