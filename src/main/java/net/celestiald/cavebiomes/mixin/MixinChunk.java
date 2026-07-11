@@ -76,6 +76,25 @@ public abstract class MixinChunk {
     @Unique private int si(int y)    { return (y - WorldHeightAPI.getMinY()) >> 4; }
     @Unique private int yBase(int i) { return i * 16 + WorldHeightAPI.getMinY(); }
 
+    @Unique
+    static boolean cavebiomes$isBlockYInRange(int blockY) {
+        return blockY >= WorldHeightAPI.getMinY() && blockY < WorldHeightAPI.getMaxY();
+    }
+
+    @Unique
+    static int cavebiomes$entityStorageIndex(int sectionY, int sectionCount) {
+        int index = sectionY - WorldHeightAPI.getMinSection();
+        if (index < 0) {
+            return 0;
+        }
+        return Math.min(index, sectionCount - 1);
+    }
+
+    @Unique
+    static int cavebiomes$trackedEntitySectionY(int storageIndex) {
+        return storageIndex + WorldHeightAPI.getMinSection();
+    }
+
     // =========================================================================
     // Constructor 1: resize storageArrays and entityLists to configured count
     // =========================================================================
@@ -161,6 +180,9 @@ public abstract class MixinChunk {
         int i  = pos.getX() & 15;
         int j  = pos.getY();
         int k  = pos.getZ() & 15;
+        if (!cavebiomes$isBlockYInRange(j)) {
+            return null;
+        }
         int l  = k << 4 | i;
 
         if (j >= this.precipitationHeightMap[l] - 1) {
@@ -448,8 +470,10 @@ public abstract class MixinChunk {
     }
 
     // =========================================================================
-    // addEntity: shift entity section index by -minSection so entities at Y<0
-    // land in the correct entityLists bucket
+    // Entity.chunkCoordY remains the raw signed section coordinate used by
+    // World.updateEntityWithOptionalForce. Only accesses to entityLists use the normalized index.
+    // Keeping those two coordinate systems distinct prevents every entity from being removed and
+    // re-added on every tick when minSection is non-zero.
     // =========================================================================
 
     @Overwrite
@@ -464,17 +488,30 @@ public abstract class MixinChunk {
             entityIn.setDead();
         }
 
-        int k = MathHelper.floor(entityIn.posY / 16.0D) - WorldHeightAPI.getMinSection();
-        if (k < 0) k = 0;
-        if (k >= this.entityLists.length) k = this.entityLists.length - 1;
+        int sectionY = MathHelper.floor(entityIn.posY / 16.0D);
+        int sectionIndex = cavebiomes$entityStorageIndex(sectionY, this.entityLists.length);
 
         MinecraftForge.EVENT_BUS.post(new EntityEvent.EnteringChunk(
                 entityIn, this.x, this.z, entityIn.chunkCoordX, entityIn.chunkCoordZ));
         entityIn.addedToChunk = true;
         entityIn.chunkCoordX = this.x;
-        entityIn.chunkCoordY = k;
+        entityIn.chunkCoordY = cavebiomes$trackedEntitySectionY(sectionIndex);
         entityIn.chunkCoordZ = this.z;
-        this.entityLists[k].add(entityIn);
+        this.entityLists[sectionIndex].add(entityIn);
+        this.markDirty();
+    }
+
+    /**
+     * Converts Entity.chunkCoordY's signed section coordinate back to an array index.
+     *
+     * @author CelestialD
+     * @reason Extended entity arrays are offset by minSection while the Entity field must retain
+     *         the raw section coordinate compared by World.updateEntityWithOptionalForce.
+     */
+    @Overwrite
+    public void removeEntityAtIndex(Entity entityIn, int sectionY) {
+        int sectionIndex = cavebiomes$entityStorageIndex(sectionY, this.entityLists.length);
+        this.entityLists[sectionIndex].remove(entityIn);
         this.markDirty();
     }
 
