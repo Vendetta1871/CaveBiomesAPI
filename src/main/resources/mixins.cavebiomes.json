@@ -24,7 +24,8 @@
         "MixinSPacketChunkData",
         "MixinChunkCache",
         "MixinMinecraftServer",
-        "MixinTeleporter"
+        "MixinTeleporter",
+        "MixinWorldEntitySpawner"
     ],
     "client": [
         "MixinChunkClient",
