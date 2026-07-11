@@ -1,9 +1,12 @@
 package net.celestiald.cavebiomes.mixin;
 
+import net.celestiald.cavebiomes.world.population.ExtendedChunkPopulationAccess;
+import net.celestiald.cavebiomes.world.population.PopulationRegionScheduler;
 import net.minecraft.world.chunk.IChunkProvider;
 import net.minecraft.world.gen.IChunkGenerator;
 import org.junit.Test;
-import org.spongepowered.asm.mixin.gen.Invoker;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -16,11 +19,18 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class PopulationRegionMixinContractTest {
+    @Test
+    public void schedulerHelperIsOutsideTheReservedMixinPackage() {
+        assertEquals("net.celestiald.cavebiomes.world.population",
+                PopulationRegionScheduler.class.getPackage().getName());
+    }
+
     @Test
     public void radiusContractRejectsUnboundedPopulationRegions() throws Exception {
         Method method = PopulationRegionScheduler.class.getDeclaredMethod(
@@ -49,15 +59,18 @@ public class PopulationRegionMixinContractTest {
     }
 
     @Test
-    public void protectedPopulationInvokerIsRegistered() throws Exception {
-        Method method = MixinChunkPopulationInvoker.class.getDeclaredMethod(
+    public void protectedPopulationBridgeUsesOnlyANormalPackageInterface() throws Exception {
+        assertTrue(ExtendedChunkPopulationAccess.class.isAssignableFrom(MixinChunk.class));
+        Method method = MixinChunk.class.getDeclaredMethod(
                 "cavebiomes$populate", IChunkGenerator.class);
-        Invoker invoker = method.getAnnotation(Invoker.class);
-        assertNotNull(invoker);
-        assertEquals("populate", invoker.value());
+        assertNotNull(method.getAnnotation(Unique.class));
+
+        Method shadow = MixinChunk.class.getDeclaredMethod(
+                "populate", IChunkGenerator.class);
+        assertNotNull(shadow.getAnnotation(Shadow.class));
 
         String config = readResource("/mixins.cavebiomes.json");
-        assertTrue(config.contains("\"MixinChunkPopulationInvoker\""));
+        assertFalse(config.contains("MixinChunkPopulationInvoker"));
     }
 
     private static void assertRejected(Method method, int radius) throws Exception {

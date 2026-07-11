@@ -1,4 +1,4 @@
-package net.celestiald.cavebiomes.mixin;
+package net.celestiald.cavebiomes.world.population;
 
 import net.celestiald.cavebiomes.api.IExtendedPopulationGenerator;
 import net.minecraft.entity.EnumCreatureType;

@@ -1,6 +1,8 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.celestiald.cavebiomes.world.population.ExtendedChunkPopulationAccess;
+import net.celestiald.cavebiomes.world.population.PopulationRegionScheduler;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
@@ -42,7 +44,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import javax.annotation.Nullable;
 
 @Mixin(Chunk.class)
-public abstract class MixinChunk {
+public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
 
     // ---- Shadowed fields ----
     @Shadow @Final @Mutable private ExtendedBlockStorage[] storageArrays;
@@ -67,6 +69,7 @@ public abstract class MixinChunk {
     @Shadow protected abstract void propagateSkylightOcclusion(int x, int z);
     @Shadow @Nullable public abstract TileEntity getTileEntity(BlockPos pos, Chunk.EnumCreateEntityType createType);
     @Shadow public abstract int getTopFilledSegment();
+    @Shadow protected abstract void populate(IChunkGenerator generator);
     // getBlockState(BlockPos) delegates to getBlockState(int,int,int) — keep shadow for external calls
     @Shadow public abstract IBlockState getBlockState(BlockPos pos);
 
@@ -76,6 +79,12 @@ public abstract class MixinChunk {
 
     // Own logger for addEntity warning
     @Unique private static final Logger CAVEBIOMES_CHUNK_LOGGER = LogManager.getLogger("CaveBiomes/Chunk");
+
+    @Override
+    @Unique
+    public void cavebiomes$populate(IChunkGenerator generator) {
+        populate(generator);
+    }
 
     // ---- API helpers ----
     @Unique private int si(int y)    { return (y - WorldHeightAPI.getMinY()) >> 4; }

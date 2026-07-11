@@ -1,4 +1,4 @@
-package net.celestiald.cavebiomes.mixin;
+package net.celestiald.cavebiomes.world.population;
 
 import net.celestiald.cavebiomes.api.IExtendedPopulationGenerator;
 import net.minecraft.world.chunk.Chunk;
@@ -6,7 +6,7 @@ import net.minecraft.world.chunk.IChunkProvider;
 import net.minecraft.world.gen.IChunkGenerator;
 
 /** Loaded-only population scheduling shared by the Chunk mixin and deterministic tests. */
-final class PopulationRegionScheduler {
+public final class PopulationRegionScheduler {
     private PopulationRegionScheduler() {
     }
 
@@ -17,7 +17,7 @@ final class PopulationRegionScheduler {
         return radius;
     }
 
-    static boolean populateLoadedRegions(IChunkProvider provider, IChunkGenerator generator,
+    public static boolean populateLoadedRegions(IChunkProvider provider, IChunkGenerator generator,
             int loadedChunkX, int loadedChunkZ) {
         return populateLoadedRegions(loadedChunkX, loadedChunkZ, generator,
                 new LoadedChunkAccess<Chunk>() {
@@ -33,7 +33,7 @@ final class PopulationRegionScheduler {
 
                     @Override
                     public void populate(Chunk chunk) {
-                        ((MixinChunkPopulationInvoker) (Object) chunk)
+                        ((ExtendedChunkPopulationAccess) (Object) chunk)
                                 .cavebiomes$populate(generator);
                     }
                 });
