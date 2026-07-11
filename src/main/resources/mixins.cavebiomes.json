@@ -16,6 +16,7 @@
         "MixinBlockPortalSize",
         "MixinEntity",
         "MixinEntityLivingBase",
+        "MixinEntityPlayerMP",
         "MixinEntityMinecart",
         "MixinEntityFallingBlock",
         "MixinChunk",
@@ -28,6 +29,7 @@
         "MixinSPacketChunkData",
         "MixinChunkCache",
         "MixinMinecraftServer",
+        "MixinPlayerList",
         "MixinTeleporter",
         "MixinWorldEntitySpawner",
         "MixinTileEntityBeacon"
