@@ -13,6 +13,7 @@
         "MixinBlockPistonBase",
         "MixinBlockFalling",
         "MixinBlockDragonEgg",
+        "MixinBlockStaticLiquid",
         "MixinBlockPortalSize",
         "MixinEntity",
         "MixinEntityLivingBase",
