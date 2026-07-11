@@ -77,12 +77,12 @@ public abstract class MixinChunk {
     @Unique private int yBase(int i) { return i * 16 + WorldHeightAPI.getMinY(); }
 
     @Unique
-    static boolean cavebiomes$isBlockYInRange(int blockY) {
+    private static boolean cavebiomes$isBlockYInRange(int blockY) {
         return blockY >= WorldHeightAPI.getMinY() && blockY < WorldHeightAPI.getMaxY();
     }
 
     @Unique
-    static int cavebiomes$entityStorageIndex(int sectionY, int sectionCount) {
+    private static int cavebiomes$entityStorageIndex(int sectionY, int sectionCount) {
         int index = sectionY - WorldHeightAPI.getMinSection();
         if (index < 0) {
             return 0;
@@ -91,7 +91,7 @@ public abstract class MixinChunk {
     }
 
     @Unique
-    static int cavebiomes$trackedEntitySectionY(int storageIndex) {
+    private static int cavebiomes$trackedEntitySectionY(int storageIndex) {
         return storageIndex + WorldHeightAPI.getMinSection();
     }
 

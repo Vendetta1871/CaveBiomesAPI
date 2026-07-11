@@ -8,6 +8,7 @@ import org.junit.Test;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -29,24 +30,32 @@ public class ExtendedSectionMixinContractTest {
         int sectionCount = WorldHeightAPI.getSectionCount();
 
         for (int sectionY = -4; sectionY <= 19; ++sectionY) {
-            int storageIndex = MixinChunk.cavebiomes$entityStorageIndex(sectionY, sectionCount);
+            int storageIndex = invokeInt(MixinChunk.class,
+                    "cavebiomes$entityStorageIndex", new Class<?>[]{int.class, int.class},
+                    sectionY, sectionCount);
             assertEquals(sectionY + 4, storageIndex);
-            assertEquals(sectionY, MixinChunk.cavebiomes$trackedEntitySectionY(storageIndex));
+            assertEquals(sectionY, invokeInt(MixinChunk.class,
+                    "cavebiomes$trackedEntitySectionY", new Class<?>[]{int.class}, storageIndex));
         }
 
-        assertEquals(0, MixinChunk.cavebiomes$entityStorageIndex(-5, sectionCount));
-        assertEquals(23, MixinChunk.cavebiomes$entityStorageIndex(20, sectionCount));
+        assertEquals(0, invokeInt(MixinChunk.class,
+                "cavebiomes$entityStorageIndex", new Class<?>[]{int.class, int.class},
+                -5, sectionCount));
+        assertEquals(23, invokeInt(MixinChunk.class,
+                "cavebiomes$entityStorageIndex", new Class<?>[]{int.class, int.class},
+                20, sectionCount));
         assertNotNull(MixinChunk.class.getDeclaredMethod(
                 "removeEntityAtIndex", Entity.class, int.class));
     }
 
     @Test
-    public void directChunkWritesRejectCoordinatesOutsideTheFiniteRange() {
+    public void directChunkWritesRejectCoordinatesOutsideTheFiniteRange()
+            throws ReflectiveOperationException {
         WorldHeightAPI.configureLocalRange(-64, 320);
-        assertFalse(MixinChunk.cavebiomes$isBlockYInRange(-65));
-        assertTrue(MixinChunk.cavebiomes$isBlockYInRange(-64));
-        assertTrue(MixinChunk.cavebiomes$isBlockYInRange(319));
-        assertFalse(MixinChunk.cavebiomes$isBlockYInRange(320));
+        assertFalse(invokeBoolean(MixinChunk.class, "cavebiomes$isBlockYInRange", -65));
+        assertTrue(invokeBoolean(MixinChunk.class, "cavebiomes$isBlockYInRange", -64));
+        assertTrue(invokeBoolean(MixinChunk.class, "cavebiomes$isBlockYInRange", 319));
+        assertFalse(invokeBoolean(MixinChunk.class, "cavebiomes$isBlockYInRange", 320));
     }
 
     @Test
@@ -54,14 +63,15 @@ public class ExtendedSectionMixinContractTest {
             throws ReflectiveOperationException {
         WorldHeightAPI.configureLocalRange(-64, 320);
         for (int worldY = -64; worldY < 320; ++worldY) {
-            int normalizedY = MixinSPacketChunkData.cavebiomes$normalizedTileEntityY(worldY);
+            int normalizedY = invokeInt(MixinSPacketChunkData.class,
+                    "cavebiomes$normalizedTileEntityY", new Class<?>[]{int.class}, worldY);
             assertEquals(WorldHeightAPI.sectionIndex(worldY), normalizedY >> 4);
         }
-        assertEquals(0, MixinSPacketChunkData.cavebiomes$normalizedTileEntityY(-64) >> 4);
-        assertEquals(4, MixinSPacketChunkData.cavebiomes$normalizedTileEntityY(0) >> 4);
-        assertEquals(16, MixinSPacketChunkData.cavebiomes$normalizedTileEntityY(192) >> 4);
-        assertEquals(20, MixinSPacketChunkData.cavebiomes$normalizedTileEntityY(256) >> 4);
-        assertEquals(23, MixinSPacketChunkData.cavebiomes$normalizedTileEntityY(319) >> 4);
+        assertEquals(0, normalizedTileSection(-64));
+        assertEquals(4, normalizedTileSection(0));
+        assertEquals(16, normalizedTileSection(192));
+        assertEquals(20, normalizedTileSection(256));
+        assertEquals(23, normalizedTileSection(319));
 
         Method handler = MixinSPacketChunkData.class.getDeclaredMethod(
                 "cavebiomes$normalizeTileEntitySectionY", BlockPos.class);
@@ -73,5 +83,28 @@ public class ExtendedSectionMixinContractTest {
         assertEquals("Lnet/minecraft/util/math/BlockPos;getY()I", redirect.at().target());
         assertEquals(1, redirect.require());
         assertEquals(1, redirect.allow());
+    }
+
+    private static int normalizedTileSection(int worldY) throws ReflectiveOperationException {
+        return invokeInt(MixinSPacketChunkData.class,
+                "cavebiomes$normalizedTileEntityY", new Class<?>[]{int.class}, worldY) >> 4;
+    }
+
+    private static boolean invokeBoolean(Class<?> owner, String name, int value)
+            throws ReflectiveOperationException {
+        Method method = owner.getDeclaredMethod(name, int.class);
+        assertTrue(name + " must be private for Mixin 0.8", Modifier.isPrivate(method.getModifiers()));
+        assertTrue(name + " must remain static", Modifier.isStatic(method.getModifiers()));
+        method.setAccessible(true);
+        return (Boolean) method.invoke(null, value);
+    }
+
+    private static int invokeInt(Class<?> owner, String name, Class<?>[] parameterTypes,
+            Object... arguments) throws ReflectiveOperationException {
+        Method method = owner.getDeclaredMethod(name, parameterTypes);
+        assertTrue(name + " must be private for Mixin 0.8", Modifier.isPrivate(method.getModifiers()));
+        assertTrue(name + " must remain static", Modifier.isStatic(method.getModifiers()));
+        method.setAccessible(true);
+        return (Integer) method.invoke(null, arguments);
     }
 }

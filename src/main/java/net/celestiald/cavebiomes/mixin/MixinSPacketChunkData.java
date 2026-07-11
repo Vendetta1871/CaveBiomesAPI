@@ -42,7 +42,7 @@ public abstract class MixinSPacketChunkData {
     }
 
     @Unique
-    static int cavebiomes$normalizedTileEntityY(int worldY) {
+    private static int cavebiomes$normalizedTileEntityY(int worldY) {
         return worldY - WorldHeightAPI.getMinY();
     }
 }
