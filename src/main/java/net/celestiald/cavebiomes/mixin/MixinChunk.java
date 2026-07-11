@@ -1,6 +1,5 @@
 package net.celestiald.cavebiomes.mixin;
 
-import net.celestiald.cavebiomes.api.IExtendedPopulationGenerator;
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
@@ -146,14 +145,6 @@ public abstract class MixinChunk {
         return WorldHeightAPI.getMinY() - 1;
     }
 
-    @Unique
-    private static int cavebiomes$checkedPopulationRadius(int radius) {
-        if (radius < 1 || radius > 8) {
-            throw new IllegalArgumentException("Population radius must be in [1, 8]: " + radius);
-        }
-        return radius;
-    }
-
     // =========================================================================
     // Extended population region: vanilla's two-by-two readiness check is only sufficient for
     // decorators offset toward +X/+Z. Opt-in generators can require a symmetric loaded square,
@@ -166,37 +157,10 @@ public abstract class MixinChunk {
             at = @At("HEAD"), cancellable = true, require = 1, allow = 1)
     private void cavebiomes$populateLoadedRegion(IChunkProvider provider,
             IChunkGenerator generator, CallbackInfo ci) {
-        if (!(generator instanceof IExtendedPopulationGenerator)) {
-            return;
+        if (PopulationRegionScheduler.populateLoadedRegions(
+                provider, generator, this.x, this.z)) {
+            ci.cancel();
         }
-
-        int radius = cavebiomes$checkedPopulationRadius(
-                ((IExtendedPopulationGenerator) generator).getPopulationRadius());
-        for (int candidateX = this.x - radius; candidateX <= this.x + radius; ++candidateX) {
-            for (int candidateZ = this.z - radius; candidateZ <= this.z + radius; ++candidateZ) {
-                Chunk candidate = provider.getLoadedChunk(candidateX, candidateZ);
-                if (candidate != null
-                        && cavebiomes$isPopulationRegionLoaded(provider,
-                            candidateX, candidateZ, radius)) {
-                    ((MixinChunkPopulationInvoker) (Object) candidate)
-                            .cavebiomes$populate(generator);
-                }
-            }
-        }
-        ci.cancel();
-    }
-
-    @Unique
-    private static boolean cavebiomes$isPopulationRegionLoaded(IChunkProvider provider,
-            int centerX, int centerZ, int radius) {
-        for (int offsetX = -radius; offsetX <= radius; ++offsetX) {
-            for (int offsetZ = -radius; offsetZ <= radius; ++offsetZ) {
-                if (provider.getLoadedChunk(centerX + offsetX, centerZ + offsetZ) == null) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     // =========================================================================

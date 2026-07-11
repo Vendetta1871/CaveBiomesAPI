@@ -23,8 +23,8 @@ import static org.junit.Assert.fail;
 public class PopulationRegionMixinContractTest {
     @Test
     public void radiusContractRejectsUnboundedPopulationRegions() throws Exception {
-        Method method = MixinChunk.class.getDeclaredMethod(
-                "cavebiomes$checkedPopulationRadius", int.class);
+        Method method = PopulationRegionScheduler.class.getDeclaredMethod(
+                "checkedRadius", int.class);
         method.setAccessible(true);
         assertEquals(1, method.invoke(null, 1));
         assertEquals(8, method.invoke(null, 8));
