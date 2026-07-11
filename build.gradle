@@ -1,7 +1,7 @@
 buildscript {
     repositories {
-        jcenter()
-        maven { url = "http://files.minecraftforge.net/maven" }
+        maven { url = "https://maven.minecraftforge.net/" }
+        mavenCentral()
         maven { url = "https://repo.spongepowered.org/maven" }
     }
     dependencies {
@@ -14,7 +14,7 @@ apply plugin: 'net.minecraftforge.gradle.forge'
 apply plugin: 'org.spongepowered.mixin'
 apply plugin: 'maven-publish'
 
-version = "1.0.0"
+version = "1.1.0"
 group = "net.celestiald"
 archivesBaseName = "cavebiomesapi"
 
@@ -32,10 +32,12 @@ minecraft {
 
 repositories {
     maven { url "https://repo.spongepowered.org/maven" }
+    mavenCentral()
 }
 
 dependencies {
     compile('org.spongepowered:mixin:0.7.11-SNAPSHOT') { transitive = false }
+    testCompile 'junit:junit:4.13.2'
 }
 
 mixin {
@@ -81,20 +83,13 @@ classes.dependsOn patchMixinRefmap
 // classpath) and as a resource the mixin plugin contributes to the jar, so the
 // packaged jar would contain it twice. Drop the duplicate when packaging.
 jar {
-    // TweakClass: in a production Forge install the LaunchWrapper reads TweakClass
-    // from mod-jar MANIFESTs and loads MixinTweaker *before* FML coremods run.
-    // That initialises Mixin through the proper channel, so the subsequent
-    // MixinBootstrap.init() call in CaveBiomesLoadingPlugin becomes a no-op and
-    // no "Multiple Mixin containers" warning is printed.
-    // In dev (runClient/runServer via ForgeGradle) the TweakClass is NOT added to
-    // the launch args, so the coremod constructor handles initialisation as usual.
+    // MixinBootstrap owns the launch tweaker. Declaring a second TweakClass here causes Forge to
+    // treat this coremod jar only as an early mixin container and skip its regular FML mod
+    // container, so CaveBiomesMod.preInit (configuration and network setup) never runs.
     manifest {
         attributes(
             'FMLCorePlugin': 'net.celestiald.cavebiomes.core.CaveBiomesLoadingPlugin',
-            'FMLCorePluginContainsFMLMod': 'true',
-            'TweakClass': 'org.spongepowered.asm.launch.MixinTweaker',
-            'TweakOrder': '0',
-            'MixinConfigs': 'mixins.cavebiomes.json'
+            'FMLCorePluginContainsFMLMod': 'true'
         )
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE

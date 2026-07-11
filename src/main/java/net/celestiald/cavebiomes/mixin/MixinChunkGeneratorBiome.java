@@ -8,7 +8,10 @@ import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 import net.minecraft.world.gen.ChunkGeneratorOverworld;
+import net.minecraft.world.World;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -38,6 +41,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(ChunkGeneratorOverworld.class)
 public abstract class MixinChunkGeneratorBiome {
+
+    @Shadow @Final private World world;
 
     @Inject(method = "generateChunk", at = @At("RETURN"))
     private void cavebiomes$decorateCaveBiomes(int cx, int cz, CallbackInfoReturnable<Chunk> cir) {
@@ -116,7 +121,8 @@ public abstract class MixinChunkGeneratorBiome {
         if (base == null) {
             return false;
         }
-        Biome resolved = BiomeLayerAPI.resolve(baseX + nx, ny, baseZ + nz, base);
+        Biome resolved = BiomeLayerAPI.resolve(this.world,
+                baseX + nx, ny, baseZ + nz, base);
         if (resolved == base) {
             return false;
         }

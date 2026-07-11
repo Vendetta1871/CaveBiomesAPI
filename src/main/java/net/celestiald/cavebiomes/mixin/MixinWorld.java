@@ -27,23 +27,7 @@ public abstract class MixinWorld {
     @Shadow public abstract boolean isBlockLoaded(BlockPos pos);
     @Shadow public abstract Chunk getChunkFromBlockCoords(BlockPos pos);
     @Shadow public abstract void notifyLightSet(BlockPos pos);
-
-    // =========================================================================
-    // World height: vanilla World.getHeight()/getActualHeight() hardcode 256.
-    // (They live in World, NOT WorldProvider — targeting WorldProvider was the
-    // original startup-crash bug.)
-    // =========================================================================
-
-    @ModifyConstant(method = "getHeight()I", constant = @Constant(intValue = 256))
-    private int fixGetHeight(int original) {
-        return WorldHeightAPI.getMaxY();
-    }
-
-    // getActualHeight: nether keeps 128, everything else uses configured maxY.
-    @ModifyConstant(method = "getActualHeight", constant = @Constant(intValue = 256))
-    private int fixGetActualHeight(int original) {
-        return WorldHeightAPI.getMaxY();
-    }
+    @Shadow protected abstract boolean isChunkLoaded(int x, int z, boolean allowEmpty);
 
     // =========================================================================
     // Build-height bounds
@@ -54,19 +38,29 @@ public abstract class MixinWorld {
         cir.setReturnValue(pos.getY() < WorldHeightAPI.getMinY() || pos.getY() >= WorldHeightAPI.getMaxY());
     }
 
-    // isAreaLoaded(int,int,int,int,int,int,boolean): vanilla checks `toY >= 0 && fromY < 256`.
-    // Extend both sides: 256 -> maxY, and `>= 0` -> `>= minY`. Without the lower fix,
-    // checkLightFor at Y < -17 calls isAreaLoaded(pos, 17) whose toY = pos.Y+17 < 0,
-    // so isAreaLoaded returns false immediately and the BFS never runs -> no light propagation.
-    @ModifyConstant(method = "isAreaLoaded(IIIIIIZ)Z", constant = @Constant(intValue = 256))
-    private int fixAreaLoadedMaxY(int original) {
-        return WorldHeightAPI.getMaxY();
-    }
-
-    @ModifyConstant(method = "isAreaLoaded(IIIIIIZ)Z",
-            constant = @Constant(intValue = 0, expandZeroConditions = Constant.Condition.GREATER_THAN_OR_EQUAL_TO_ZERO))
-    private int fixAreaLoadedMinY(int original) {
-        return WorldHeightAPI.getMinY();
+    // Reimplement the small private bound/loaded-chunk loop. Using expandZeroConditions here also
+    // rewrites vanilla's boolean false return constants and can turn an unloaded area into true.
+    @Inject(method = "isAreaLoaded(IIIIIIZ)Z", at = @At("HEAD"), cancellable = true)
+    private void cavebiomes$isAreaLoaded(int fromX, int fromY, int fromZ,
+            int toX, int toY, int toZ, boolean allowEmpty,
+            CallbackInfoReturnable<Boolean> cir) {
+        if (toY < WorldHeightAPI.getMinY() || fromY >= WorldHeightAPI.getMaxY()) {
+            cir.setReturnValue(false);
+            return;
+        }
+        int minimumChunkX = fromX >> 4;
+        int maximumChunkX = toX >> 4;
+        int minimumChunkZ = fromZ >> 4;
+        int maximumChunkZ = toZ >> 4;
+        for (int chunkX = minimumChunkX; chunkX <= maximumChunkX; ++chunkX) {
+            for (int chunkZ = minimumChunkZ; chunkZ <= maximumChunkZ; ++chunkZ) {
+                if (!this.isChunkLoaded(chunkX, chunkZ, allowEmpty)) {
+                    cir.setReturnValue(false);
+                    return;
+                }
+            }
+        }
+        cir.setReturnValue(true);
     }
 
     // =========================================================================
@@ -148,12 +142,13 @@ public abstract class MixinWorld {
     // Snow / ice formation Y range (vanilla hardcodes 256)
     // =========================================================================
 
-    @ModifyConstant(method = "canSnowAt", constant = @Constant(intValue = 256))
+    @ModifyConstant(method = "canSnowAtBody", remap = false,
+            constant = @Constant(intValue = 256))
     private int fixSnowMaxY(int original) {
         return WorldHeightAPI.getMaxY();
     }
 
-    @ModifyConstant(method = "canBlockFreeze(Lnet/minecraft/util/math/BlockPos;Z)Z",
+    @ModifyConstant(method = "canBlockFreezeBody", remap = false,
             constant = @Constant(intValue = 256))
     private int fixFreezeMaxY(int original) {
         return WorldHeightAPI.getMaxY();

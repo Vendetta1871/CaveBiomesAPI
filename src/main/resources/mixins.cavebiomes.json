@@ -4,6 +4,7 @@
     "refmap": "mixins.cavebiomes.refmap.json",
     "mixins": [
         "MixinWorld",
+        "MixinWorldProvider",
         "MixinChunk",
         "MixinChunkBiome",
         "MixinAnvilChunkLoader",

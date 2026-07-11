@@ -1,6 +1,6 @@
 package net.celestiald.cavebiomes.mixin;
 
-import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.celestiald.cavebiomes.api.ExtendedChunkAPI;
 import net.minecraft.network.play.server.SPacketChunkData;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.Constant;
@@ -19,6 +19,6 @@ public abstract class MixinSPacketChunkData {
     @ModifyConstant(method = "<init>(Lnet/minecraft/world/chunk/Chunk;I)V",
             constant = @Constant(intValue = 65535))
     private int cavebiomes$fullMask(int original) {
-        return (1 << WorldHeightAPI.getSectionCount()) - 1;
+        return ExtendedChunkAPI.fullSectionMask();
     }
 }

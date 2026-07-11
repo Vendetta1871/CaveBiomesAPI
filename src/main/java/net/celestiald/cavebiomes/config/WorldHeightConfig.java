@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.config;
 
 import net.minecraftforge.common.config.Configuration;
+import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,6 +46,7 @@ public final class WorldHeightConfig {
             maxY = clampedMax;
         }
 
+        WorldHeightAPI.configureLocalRange(minY, maxY);
         if (cfg.hasChanged()) cfg.save();
     }
 }

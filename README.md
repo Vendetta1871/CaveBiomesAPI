@@ -30,7 +30,7 @@ repositories {
 
 dependencies {
     // compile-time access to the API; not bundled in your output jar
-    deobfCompile 'com.github.Vendetta1871:CaveBiomesAPI:1.0.0'
+    deobfCompile 'com.github.Vendetta1871:CaveBiomesAPI:1.1.0'
 }
 ```
 
@@ -42,7 +42,7 @@ dependencies {
 
 This tells Forge to load CaveBiomesAPI before your mod.
 
-At runtime, drop both `cavebiomesapi-1.0.0.jar` and your mod jar into the `mods/` folder.
+At runtime, drop both `cavebiomesapi-1.1.0.jar` and your mod jar into the `mods/` folder.
 
 ---
 
@@ -85,6 +85,28 @@ import net.minecraft.init.Biomes;
 // In your mod's FMLInitializationEvent handler:
 BiomeLayerAPI.register((x, y, z, base) -> y < 30 ? Biomes.MESA : base);
 ```
+
+Seed- or dimension-dependent providers should use the world-aware overload:
+
+```java
+BiomeLayerAPI.register((IWorldVerticalBiomeProvider) (world, x, y, z, base) ->
+        world.provider.getDimension() == 0 && y < 30 ? Biomes.MESA : base);
+```
+
+### Extended chunk generation
+
+Generators which fill the configured range directly should use `ExtendedChunkAPI`. It validates
+the active range, creates signed-Y `ExtendedBlockStorage` sections, performs generation-time
+section writes, and exposes the exact full-section packet mask.
+
+```java
+ExtendedChunkAPI.requireRange("examplemod", -64, 320);
+ExtendedChunkAPI.setBlockState(chunk, localX, worldY, localZ, state,
+        world.provider.hasSkyLight());
+```
+
+The server synchronizes its active range to multiplayer clients before chunk streaming. A client
+restores its local configured range on disconnect.
 
 `IVerticalBiomeProvider` is a `@FunctionalInterface`:
 

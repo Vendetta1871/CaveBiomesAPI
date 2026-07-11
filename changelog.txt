@@ -1,4 +1,13 @@
 1.12.x Changelog
+1.1.0
+-------
+ - Add world-aware vertical biome providers for seed- and dimension-dependent layers.
+ - Add stable extended-chunk generation helpers and correct 32-section masks.
+ - Synchronize the authoritative world-height range to multiplayer clients.
+ - Fix Forge production bootstrap so the regular mod container and config load.
+ - Patch WorldProvider height delegates and the actual snow/freeze body methods.
+ - Replace the unsafe expanded-zero isAreaLoaded injection with an exact implementation.
+
 1.0-pre
 =======
  - 1.0-pre-17 Enable promotion from actions
