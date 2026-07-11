@@ -21,6 +21,7 @@
         "MixinEntityMinecart",
         "MixinEntityFallingBlock",
         "MixinChunk",
+        "MixinChunkPopulationInvoker",
         "MixinWorldServer",
         "MixinChunkBiome",
         "MixinAnvilChunkLoader",
