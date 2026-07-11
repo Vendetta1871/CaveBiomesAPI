@@ -2,8 +2,13 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.block.BlockLiquid;
+import net.minecraft.block.material.Material;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.init.Blocks;
 import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.World;
+import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.Chunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -28,6 +33,9 @@ public abstract class MixinWorld {
     @Shadow public abstract Chunk getChunkFromBlockCoords(BlockPos pos);
     @Shadow public abstract void notifyLightSet(BlockPos pos);
     @Shadow protected abstract boolean isChunkLoaded(int x, int z, boolean allowEmpty);
+    @Shadow public abstract Biome getBiome(BlockPos pos);
+    @Shadow public abstract IBlockState getBlockState(BlockPos pos);
+    @Shadow public abstract int getLightFor(EnumSkyBlock type, BlockPos pos);
 
     // =========================================================================
     // Build-height bounds
@@ -142,15 +150,63 @@ public abstract class MixinWorld {
     // Snow / ice formation Y range (vanilla hardcodes 256)
     // =========================================================================
 
-    @ModifyConstant(method = "canSnowAtBody", remap = false,
-            constant = @Constant(intValue = 256))
-    private int fixSnowMaxY(int original) {
-        return WorldHeightAPI.getMaxY();
+    @Inject(method = "canSnowAtBody", at = @At("HEAD"), cancellable = true, remap = false)
+    private void cavebiomes$canSnowAtBody(BlockPos pos, boolean checkLight,
+            CallbackInfoReturnable<Boolean> cir) {
+        int y = pos.getY();
+        if (y >= 0 && y < 256) {
+            return;
+        }
+        if (y < WorldHeightAPI.getMinY() || y >= WorldHeightAPI.getMaxY()) {
+            cir.setReturnValue(false);
+            return;
+        }
+        Biome biome = this.getBiome(pos);
+        if (biome.getTemperature(pos) >= 0.15F) {
+            cir.setReturnValue(false);
+            return;
+        }
+        if (!checkLight) {
+            cir.setReturnValue(true);
+            return;
+        }
+        IBlockState state = this.getBlockState(pos);
+        World world = (World) (Object) this;
+        cir.setReturnValue(this.getLightFor(EnumSkyBlock.BLOCK, pos) < 10
+                && state.getBlock().isAir(state, world, pos)
+                && Blocks.SNOW_LAYER.canPlaceBlockAt(world, pos));
     }
 
-    @ModifyConstant(method = "canBlockFreezeBody", remap = false,
-            constant = @Constant(intValue = 256))
-    private int fixFreezeMaxY(int original) {
-        return WorldHeightAPI.getMaxY();
+    @Inject(method = "canBlockFreezeBody", at = @At("HEAD"), cancellable = true,
+            remap = false)
+    private void cavebiomes$canBlockFreezeBody(BlockPos pos, boolean noWaterAdjacent,
+            CallbackInfoReturnable<Boolean> cir) {
+        int y = pos.getY();
+        if (y >= 0 && y < 256) {
+            return;
+        }
+        if (y < WorldHeightAPI.getMinY() || y >= WorldHeightAPI.getMaxY()
+                || this.getBiome(pos).getTemperature(pos) >= 0.15F
+                || this.getLightFor(EnumSkyBlock.BLOCK, pos) >= 10) {
+            cir.setReturnValue(false);
+            return;
+        }
+        IBlockState state = this.getBlockState(pos);
+        if ((state.getBlock() != Blocks.WATER && state.getBlock() != Blocks.FLOWING_WATER)
+                || state.getValue(BlockLiquid.LEVEL) != 0) {
+            cir.setReturnValue(false);
+            return;
+        }
+        if (!noWaterAdjacent) {
+            cir.setReturnValue(true);
+            return;
+        }
+        boolean surrounded = isWater(pos.west()) && isWater(pos.east())
+                && isWater(pos.north()) && isWater(pos.south());
+        cir.setReturnValue(!surrounded);
+    }
+
+    private boolean isWater(BlockPos pos) {
+        return this.getBlockState(pos).getMaterial() == Material.WATER;
     }
 }
