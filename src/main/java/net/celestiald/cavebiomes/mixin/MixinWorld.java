@@ -12,6 +12,7 @@ import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.Chunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -36,6 +37,16 @@ public abstract class MixinWorld {
     @Shadow public abstract Biome getBiome(BlockPos pos);
     @Shadow public abstract IBlockState getBlockState(BlockPos pos);
     @Shadow public abstract int getLightFor(EnumSkyBlock type, BlockPos pos);
+
+    @Unique
+    private static boolean cavebiomes$usesExtendedSurfaceRange(int dimension) {
+        return dimension == 0 && WorldHeightAPI.getMinY() < 0;
+    }
+
+    @Unique
+    private static int cavebiomes$topSurfaceScanStart(int topFilledSegment) {
+        return Math.min(topFilledSegment + 16, WorldHeightAPI.getMaxY());
+    }
 
     // =========================================================================
     // Build-height bounds
@@ -144,6 +155,40 @@ public abstract class MixinWorld {
         }
         if (!this.isBlockLoaded(pos)) { cir.setReturnValue(type.defaultLightValue); return; }
         cir.setReturnValue(this.getChunkFromBlockCoords(pos).getLightFor(type, pos));
+    }
+
+    // =========================================================================
+    // Top-surface query. Vanilla walks down to Y=-1 from the highest populated
+    // section. Extend only the Overworld walk to minY-1 and cap its starting
+    // point at the configured exclusive upper bound.
+    // =========================================================================
+
+    @Inject(method = "getTopSolidOrLiquidBlock", at = @At("HEAD"), cancellable = true,
+            require = 1, allow = 1)
+    private void cavebiomes$getTopSolidOrLiquidBlock(BlockPos pos,
+            CallbackInfoReturnable<BlockPos> cir) {
+        World world = (World) (Object) this;
+        if (!cavebiomes$usesExtendedSurfaceRange(world.provider.getDimension())) {
+            return;
+        }
+
+        Chunk chunk = this.getChunkFromBlockCoords(pos);
+        BlockPos cursor = new BlockPos(pos.getX(),
+                cavebiomes$topSurfaceScanStart(chunk.getTopFilledSegment()), pos.getZ());
+        int minY = WorldHeightAPI.getMinY();
+
+        while (cursor.getY() >= minY) {
+            BlockPos below = cursor.down();
+            IBlockState state = chunk.getBlockState(below);
+            if (state.getMaterial().blocksMovement()
+                    && !state.getBlock().isLeaves(state, world, below)
+                    && !state.getBlock().isFoliage(world, below)) {
+                break;
+            }
+            cursor = below;
+        }
+
+        cir.setReturnValue(cursor);
     }
 
     // =========================================================================

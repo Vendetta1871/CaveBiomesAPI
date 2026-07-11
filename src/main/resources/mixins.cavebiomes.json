@@ -18,6 +18,7 @@
         "MixinEntityMinecart",
         "MixinEntityFallingBlock",
         "MixinChunk",
+        "MixinWorldServer",
         "MixinChunkBiome",
         "MixinAnvilChunkLoader",
         "MixinChunkGeneratorOverworld",

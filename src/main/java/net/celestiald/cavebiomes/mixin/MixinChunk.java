@@ -2,6 +2,7 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.crash.CrashReport;
 import net.minecraft.crash.CrashReportCategory;
@@ -34,6 +35,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import javax.annotation.Nullable;
 
@@ -126,6 +128,21 @@ public abstract class MixinChunk {
         return worldY > WorldHeightAPI.getMinY();
     }
 
+    @Unique
+    private static boolean cavebiomes$usesExtendedSurfaceRange(int dimension) {
+        return dimension == 0 && WorldHeightAPI.getMinY() < 0;
+    }
+
+    @Unique
+    private static int cavebiomes$precipitationScanStart(int topFilledSegment) {
+        return Math.min(topFilledSegment + 15, WorldHeightAPI.getMaxY() - 1);
+    }
+
+    @Unique
+    private static int cavebiomes$emptyPrecipitationHeight() {
+        return WorldHeightAPI.getMinY() - 1;
+    }
+
     // =========================================================================
     // Constructor 1: resize storageArrays and entityLists to configured count
     // =========================================================================
@@ -203,6 +220,47 @@ public abstract class MixinChunk {
             cat.addCrashSection("Location", CrashReportCategory.getCoordinateInfo(x, y, z));
             throw new ReportedException(report);
         }
+    }
+
+    // =========================================================================
+    // Precipitation surface: vanilla stops its lazy column scan above Y=0.
+    // Keep that implementation untouched outside the extended Overworld, while
+    // shifting both its lower bound and empty-column sentinel with minY.
+    // =========================================================================
+
+    @Inject(method = "getPrecipitationHeight", at = @At("HEAD"), cancellable = true,
+            require = 1, allow = 1)
+    private void cavebiomes$getPrecipitationHeight(BlockPos pos,
+            CallbackInfoReturnable<BlockPos> cir) {
+        if (!cavebiomes$usesExtendedSurfaceRange(this.world.provider.getDimension())) {
+            return;
+        }
+
+        int localX = pos.getX() & 15;
+        int localZ = pos.getZ() & 15;
+        int column = localX | localZ << 4;
+        int height = this.precipitationHeightMap[column];
+
+        if (height == -999) {
+            int minY = WorldHeightAPI.getMinY();
+            BlockPos cursor = new BlockPos(pos.getX(),
+                    cavebiomes$precipitationScanStart(this.getTopFilledSegment()), pos.getZ());
+            height = cavebiomes$emptyPrecipitationHeight();
+
+            while (cursor.getY() > minY) {
+                IBlockState state = this.getBlockState(cursor);
+                Material material = state.getMaterial();
+                if (material.blocksMovement() || material.isLiquid()) {
+                    height = cursor.getY() + 1;
+                    break;
+                }
+                cursor = cursor.down();
+            }
+
+            this.precipitationHeightMap[column] = height;
+        }
+
+        cir.setReturnValue(new BlockPos(pos.getX(), height, pos.getZ()));
     }
 
     // =========================================================================
