@@ -13,6 +13,7 @@
         "MixinBlockPistonBase",
         "MixinBlockFalling",
         "MixinBlockDragonEgg",
+        "MixinBlockPortalSize",
         "MixinEntityFallingBlock",
         "MixinChunk",
         "MixinChunkBiome",
@@ -22,7 +23,8 @@
         "MixinPlayerChunkMapEntry",
         "MixinSPacketChunkData",
         "MixinChunkCache",
-        "MixinMinecraftServer"
+        "MixinMinecraftServer",
+        "MixinTeleporter"
     ],
     "client": [
         "MixinChunkClient",
