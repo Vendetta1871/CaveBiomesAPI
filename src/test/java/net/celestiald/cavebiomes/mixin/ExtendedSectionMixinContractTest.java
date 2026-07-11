@@ -9,6 +9,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -83,6 +85,79 @@ public class ExtendedSectionMixinContractTest {
         assertEquals("Lnet/minecraft/util/math/BlockPos;getY()I", redirect.at().target());
         assertEquals(1, redirect.require());
         assertEquals(1, redirect.allow());
+    }
+
+    @Test
+    public void relightQueueCoversEveryConfiguredSectionColumnExactlyOnce()
+            throws ReflectiveOperationException {
+        WorldHeightAPI.configureLocalRange(-64, 320);
+        int sectionCount = WorldHeightAPI.getSectionCount();
+        int queueLimit = invokeInt(MixinChunk.class, "cavebiomes$relightQueueLimit",
+                new Class<?>[]{int.class}, sectionCount);
+        assertEquals(24 * 16 * 16, queueLimit);
+
+        Set<Integer> visited = new HashSet<>();
+        for (int queueIndex = 0; queueIndex < queueLimit; ++queueIndex) {
+            int section = invokeInt(MixinChunk.class, "cavebiomes$relightSectionIndex",
+                    new Class<?>[]{int.class, int.class}, queueIndex, sectionCount);
+            int localX = invokeInt(MixinChunk.class, "cavebiomes$relightLocalX",
+                    new Class<?>[]{int.class, int.class}, queueIndex, sectionCount);
+            int localZ = invokeInt(MixinChunk.class, "cavebiomes$relightLocalZ",
+                    new Class<?>[]{int.class, int.class}, queueIndex, sectionCount);
+
+            assertTrue(section >= 0 && section < sectionCount);
+            assertTrue(localX >= 0 && localX < 16);
+            assertTrue(localZ >= 0 && localZ < 16);
+            assertTrue(visited.add((section << 8) | (localX << 4) | localZ));
+        }
+        assertEquals(queueLimit, visited.size());
+
+        assertRelightCoordinate(0, sectionCount, 0, 0, 0);
+        assertRelightCoordinate(23, sectionCount, 23, 0, 0);
+        assertRelightCoordinate(24, sectionCount, 0, 1, 0);
+        assertRelightCoordinate(sectionCount * 16, sectionCount, 0, 0, 1);
+        assertRelightCoordinate(queueLimit - 1, sectionCount, 23, 15, 15);
+    }
+
+    @Test
+    public void relightWorldYAndLightScanUseConfiguredMinimum()
+            throws ReflectiveOperationException {
+        WorldHeightAPI.configureLocalRange(-64, 320);
+        assertEquals(-64, invokeInt(MixinChunk.class, "cavebiomes$relightWorldY",
+                new Class<?>[]{int.class, int.class}, 0, 0));
+        assertEquals(-49, invokeInt(MixinChunk.class, "cavebiomes$relightWorldY",
+                new Class<?>[]{int.class, int.class}, 0, 15));
+        assertEquals(0, invokeInt(MixinChunk.class, "cavebiomes$relightWorldY",
+                new Class<?>[]{int.class, int.class}, 4, 0));
+        assertEquals(319, invokeInt(MixinChunk.class, "cavebiomes$relightWorldY",
+                new Class<?>[]{int.class, int.class}, 23, 15));
+
+        assertFalse(invokeBoolean(MixinChunk.class,
+                "cavebiomes$isAboveMinimumBuildHeight", -64));
+        assertTrue(invokeBoolean(MixinChunk.class,
+                "cavebiomes$isAboveMinimumBuildHeight", -63));
+
+        WorldHeightAPI.configureLocalRange(0, 256);
+        assertFalse(invokeBoolean(MixinChunk.class,
+                "cavebiomes$isAboveMinimumBuildHeight", 0));
+        assertTrue(invokeBoolean(MixinChunk.class,
+                "cavebiomes$isAboveMinimumBuildHeight", 1));
+        assertEquals(4096, invokeInt(MixinChunk.class, "cavebiomes$relightQueueLimit",
+                new Class<?>[]{int.class}, 16));
+    }
+
+    private static void assertRelightCoordinate(int queueIndex, int sectionCount,
+            int expectedSection, int expectedX, int expectedZ)
+            throws ReflectiveOperationException {
+        assertEquals(expectedSection, invokeInt(MixinChunk.class,
+                "cavebiomes$relightSectionIndex", new Class<?>[]{int.class, int.class},
+                queueIndex, sectionCount));
+        assertEquals(expectedX, invokeInt(MixinChunk.class,
+                "cavebiomes$relightLocalX", new Class<?>[]{int.class, int.class},
+                queueIndex, sectionCount));
+        assertEquals(expectedZ, invokeInt(MixinChunk.class,
+                "cavebiomes$relightLocalZ", new Class<?>[]{int.class, int.class},
+                queueIndex, sectionCount));
     }
 
     private static int normalizedTileSection(int worldY) throws ReflectiveOperationException {

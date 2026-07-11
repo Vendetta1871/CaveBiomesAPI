@@ -48,6 +48,7 @@ public abstract class MixinChunk {
     @Shadow private int heightMapMinimum;
     @Shadow private int[] precipitationHeightMap;
     @Shadow private boolean dirty;
+    @Shadow private int queuedLightChecks;
     // NB: must NOT be `public final int x = 0` — javac folds a final field with a
     // constant initializer into the literal 0, so `this.x`/`this.z` would compile
     // to 0 instead of reading the real chunk coords (killed entities, broke
@@ -95,6 +96,36 @@ public abstract class MixinChunk {
         return storageIndex + WorldHeightAPI.getMinSection();
     }
 
+    @Unique
+    private static int cavebiomes$relightQueueLimit(int sectionCount) {
+        return sectionCount * 16 * 16;
+    }
+
+    @Unique
+    private static int cavebiomes$relightSectionIndex(int queueIndex, int sectionCount) {
+        return queueIndex % sectionCount;
+    }
+
+    @Unique
+    private static int cavebiomes$relightLocalX(int queueIndex, int sectionCount) {
+        return queueIndex / sectionCount % 16;
+    }
+
+    @Unique
+    private static int cavebiomes$relightLocalZ(int queueIndex, int sectionCount) {
+        return queueIndex / (sectionCount * 16);
+    }
+
+    @Unique
+    private static int cavebiomes$relightWorldY(int sectionIndex, int localY) {
+        return WorldHeightAPI.sectionYBase(sectionIndex) + localY;
+    }
+
+    @Unique
+    private static boolean cavebiomes$isAboveMinimumBuildHeight(int worldY) {
+        return worldY > WorldHeightAPI.getMinY();
+    }
+
     // =========================================================================
     // Constructor 1: resize storageArrays and entityLists to configured count
     // =========================================================================
@@ -109,6 +140,10 @@ public abstract class MixinChunk {
                 this.entityLists[i] = new ClassInheritanceMultiMap<>(Entity.class);
             }
         }
+        // Vanilla initializes this to 4096 (= 16 sections * 16 X * 16 Z), meaning
+        // the incremental relight sweep is complete until resetRelightChecks() runs.
+        // Preserve that state for the configured number of sections.
+        this.queuedLightChecks = cavebiomes$relightQueueLimit(count);
     }
 
     // =========================================================================
@@ -447,6 +482,106 @@ public abstract class MixinChunk {
 
     // generateHeightMap() is @SideOnly(CLIENT) in vanilla — its override lives
     // in MixinChunkClient so this common Mixin still applies on a dedicated server.
+
+    // =========================================================================
+    // Incremental relight sweep: vanilla encodes 16 sections in a 4096-entry
+    // queue and anchors their world positions at Y=0. Decode against the actual
+    // storage-array length and minY so every configured section is visited once.
+    // =========================================================================
+
+    /**
+     * @author CelestialD
+     * @reason Decode incremental relight work against the configured finite section range.
+     */
+    @Overwrite
+    public void enqueueRelightChecks() {
+        int sectionCount = this.storageArrays.length;
+        int queueLimit = cavebiomes$relightQueueLimit(sectionCount);
+        if (this.queuedLightChecks >= queueLimit) {
+            return;
+        }
+
+        for (int iteration = 0; iteration < 8; ++iteration) {
+            if (this.queuedLightChecks >= queueLimit) {
+                return;
+            }
+
+            int queueIndex = this.queuedLightChecks++;
+            int sectionIndex = cavebiomes$relightSectionIndex(queueIndex, sectionCount);
+            int localX = cavebiomes$relightLocalX(queueIndex, sectionCount);
+            int localZ = cavebiomes$relightLocalZ(queueIndex, sectionCount);
+            ExtendedBlockStorage section = this.storageArrays[sectionIndex];
+
+            for (int localY = 0; localY < 16; ++localY) {
+                int worldY = cavebiomes$relightWorldY(sectionIndex, localY);
+                BlockPos pos = new BlockPos((this.x << 4) + localX, worldY,
+                        (this.z << 4) + localZ);
+                boolean boundary = localY == 0 || localY == 15
+                        || localX == 0 || localX == 15 || localZ == 0 || localZ == 15;
+                IBlockState state = section == Chunk.NULL_BLOCK_STORAGE
+                        ? Blocks.AIR.getDefaultState() : section.get(localX, localY, localZ);
+
+                if ((section == Chunk.NULL_BLOCK_STORAGE && boundary)
+                        || (section != Chunk.NULL_BLOCK_STORAGE
+                        && state.getBlock().isAir(state, this.world, pos))) {
+                    for (EnumFacing facing : EnumFacing.values()) {
+                        BlockPos neighbor = pos.offset(facing);
+                        IBlockState neighborState = this.world.getBlockState(neighbor);
+                        if (neighborState.getLightValue(this.world, neighbor) > 0) {
+                            this.world.checkLight(neighbor);
+                        }
+                    }
+                    this.world.checkLight(pos);
+                }
+            }
+        }
+    }
+
+    /**
+     * Checks one horizontal column while populating chunk light. Vanilla stops
+     * both downward passes at Y=0; the finite world must stop at minY instead.
+     *
+     * @author CelestialD
+     * @reason Populate skylight and emitted light through the configured minimum Y.
+     */
+    @Overwrite
+    private boolean checkLight(int localX, int localZ) {
+        int topSegment = this.getTopFilledSegment();
+        boolean foundOpaque = false;
+        boolean reachedOpaqueBelowSea = false;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(
+                (this.x << 4) + localX, WorldHeightAPI.getMinY(),
+                (this.z << 4) + localZ);
+
+        for (int worldY = topSegment + 16 - 1;
+                worldY > this.world.getSeaLevel()
+                        || (cavebiomes$isAboveMinimumBuildHeight(worldY)
+                        && !reachedOpaqueBelowSea);
+                --worldY) {
+            pos.setPos(pos.getX(), worldY, pos.getZ());
+            int opacity = this.getBlockLightOpacity(localX, worldY, localZ);
+            if (opacity == 255 && worldY < this.world.getSeaLevel()) {
+                reachedOpaqueBelowSea = true;
+            }
+
+            if (!foundOpaque && opacity > 0) {
+                foundOpaque = true;
+            } else if (foundOpaque && opacity == 0 && !this.world.checkLight(pos)) {
+                return false;
+            }
+        }
+
+        for (int worldY = pos.getY(); cavebiomes$isAboveMinimumBuildHeight(worldY);
+                --worldY) {
+            pos.setPos(pos.getX(), worldY, pos.getZ());
+            IBlockState state = this.getBlockState(pos);
+            if (state.getLightValue(this.world, pos) > 0) {
+                this.world.checkLight(pos);
+            }
+        }
+
+        return true;
+    }
 
     // =========================================================================
     // isEmptyBetween (func_76606_c): vanilla clamps to [0,256) and indexes
