@@ -77,13 +77,33 @@ public class PopulationRegionSchedulerTest {
                 new Coordinate(1, -1), new Coordinate(1, 0), new Coordinate(1, 1),
                 new Coordinate(0, 1), new Coordinate(-1, 1), new Coordinate(-1, 0),
                 new Coordinate(0, 0));
-        Set<String> expected = keys(square(-1, 1));
+        // The finite five-by-five fixture reaches only the first two canonical phases. Later
+        // phases intentionally wait for their lower-phase boundary neighbors to become ready.
+        Set<String> expected = new LinkedHashSet<String>(Arrays.asList("0,0", "0,1"));
 
         for (List<Coordinate> order : Arrays.asList(rowMajor, reverse, outsideIn)) {
             FakeChunks chunks = populateInOrder(order);
             assertEquals(expected, chunks.populatedKeys());
             assertEquals("each ready chunk must populate once", expected.size(),
                     chunks.populateCalls);
+            assertStableLocalOrder(chunks, 1);
+        }
+    }
+
+    @Test
+    public void adjacentCentersAlwaysUseTheSameLocalPhaseOrder() {
+        assertEquals(0, PopulationRegionScheduler.stablePhase(0, 0, 1));
+        assertTrue(PopulationRegionScheduler.stablePhase(0, 0, 1)
+            < PopulationRegionScheduler.stablePhase(1, 0, 1));
+        assertTrue(PopulationRegionScheduler.stablePhase(0, 0, 1)
+            < PopulationRegionScheduler.stablePhase(-1, 0, 1));
+
+        List<Coordinate> rowMajor = square(-2, 2);
+        List<Coordinate> reverse = new ArrayList<Coordinate>(rowMajor);
+        Collections.reverse(reverse);
+        for (List<Coordinate> order : Arrays.asList(rowMajor, reverse)) {
+            FakeChunks chunks = populateInOrder(order);
+            assertStableLocalOrder(chunks, 1);
         }
     }
 
@@ -144,6 +164,26 @@ public class PopulationRegionSchedulerTest {
         return result;
     }
 
+    private static void assertStableLocalOrder(FakeChunks chunks, int radius) {
+        for (Coordinate left : chunks.populatedCoordinates) {
+            for (Coordinate right : chunks.populatedCoordinates) {
+                if (left == right || Math.abs(left.x - right.x) > radius
+                        || Math.abs(left.z - right.z) > radius) {
+                    continue;
+                }
+                int leftPhase = PopulationRegionScheduler.stablePhase(
+                    left.x, left.z, radius);
+                int rightPhase = PopulationRegionScheduler.stablePhase(
+                    right.x, right.z, radius);
+                if (leftPhase < rightPhase) {
+                    assertTrue(left + " must precede " + right,
+                        chunks.populatedCoordinates.indexOf(left)
+                            < chunks.populatedCoordinates.indexOf(right));
+                }
+            }
+        }
+    }
+
     private static final class ExtendedGenerator implements IExtendedPopulationGenerator {
         private final int radius;
 
@@ -161,6 +201,7 @@ public class PopulationRegionSchedulerTest {
             implements PopulationRegionScheduler.LoadedChunkAccess<FakeChunk> {
         private final Map<String, FakeChunk> loaded = new LinkedHashMap<String, FakeChunk>();
         private final Set<String> populated = new LinkedHashSet<String>();
+        private final List<Coordinate> populatedCoordinates = new ArrayList<Coordinate>();
         private int loadedLookups;
         private int populateCalls;
 
@@ -202,6 +243,7 @@ public class PopulationRegionSchedulerTest {
             ++populateCalls;
             chunk.populated = true;
             populated.add(key(chunk.x, chunk.z));
+            populatedCoordinates.add(new Coordinate(chunk.x, chunk.z));
         }
     }
 
