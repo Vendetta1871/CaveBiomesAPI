@@ -1,8 +1,6 @@
 package net.celestiald.cavebiomes.core;
 
 import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
-import org.spongepowered.asm.launch.MixinBootstrap;
-import org.spongepowered.asm.mixin.Mixins;
 
 import java.util.Map;
 
@@ -11,8 +9,8 @@ import java.util.Map;
 public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
 
     public CaveBiomesLoadingPlugin() {
-        MixinBootstrap.init();
-        Mixins.addConfiguration("mixins.cavebiomes.json");
+        MixinBootstrapRequirement.initialize(
+                CaveBiomesLoadingPlugin.class.getClassLoader());
     }
 
     @Override public String[] getASMTransformerClass() { return null; }
