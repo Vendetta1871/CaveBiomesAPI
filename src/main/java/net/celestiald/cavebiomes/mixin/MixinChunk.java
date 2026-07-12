@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.celestiald.cavebiomes.api.IWrappedWorldType;
 import net.celestiald.cavebiomes.world.population.ExtendedChunkPopulationAccess;
 import net.celestiald.cavebiomes.world.population.PopulationRegionScheduler;
 import net.minecraft.block.Block;
@@ -225,7 +226,11 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
 
     @Overwrite
     public IBlockState getBlockState(final int x, final int y, final int z) {
-        if (this.world.getWorldType() == WorldType.DEBUG_ALL_BLOCK_STATES) {
+        WorldType worldType = this.world.getWorldType();
+        if (worldType instanceof IWrappedWorldType) {
+            worldType = ((IWrappedWorldType) worldType).getBaseWorldType();
+        }
+        if (worldType == WorldType.DEBUG_ALL_BLOCK_STATES) {
             IBlockState iblockstate = null;
             if (y == 60) iblockstate = Blocks.BARRIER.getDefaultState();
             if (y == 70) iblockstate = ChunkGeneratorDebug.getBlockStateFor(x, z);

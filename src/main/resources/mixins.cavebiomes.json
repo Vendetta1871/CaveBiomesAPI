@@ -24,7 +24,6 @@
         "MixinWorldServer",
         "MixinChunkBiome",
         "MixinAnvilChunkLoader",
-        "MixinChunkGeneratorOverworld",
         "MixinChunkGeneratorBiome",
         "MixinPlayerChunkMapEntry",
         "MixinSPacketChunkData",

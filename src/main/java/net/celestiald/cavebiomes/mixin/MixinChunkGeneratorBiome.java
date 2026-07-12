@@ -24,10 +24,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * within each registered vertical biome's Y-band. Solid rock between caves stays stone, just
  * like real deserts are stone underground.
  *
- * <p>Runs at {@code generateChunk} RETURN on the finished {@link Chunk}, mirroring the Stage-1
- * {@code MixinChunkGeneratorOverworld.cavebiomes$fillBelowZero} pattern (direct
- * {@link ExtendedBlockStorage} writes, no lighting churn since stone↔surface-block are both
- * opaque full cubes).</p>
+ * <p>Runs at {@code generateChunk} RETURN on the finished {@link Chunk}, using direct
+ * {@link ExtendedBlockStorage} writes with no lighting churn since stone and surface blocks are
+ * opaque full cubes.</p>
  *
  * <p>Inert by default: if no providers are registered the inject returns immediately, leaving
  * generation byte-for-byte vanilla.</p>
