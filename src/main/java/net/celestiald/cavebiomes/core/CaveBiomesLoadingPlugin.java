@@ -1,5 +1,6 @@
 package net.celestiald.cavebiomes.core;
 
+import net.minecraft.launchwrapper.Launch;
 import net.minecraftforge.fml.relauncher.IFMLLoadingPlugin;
 
 import java.util.Map;
@@ -8,14 +9,11 @@ import java.util.Map;
 @IFMLLoadingPlugin.SortingIndex(1001)
 public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
 
-    public CaveBiomesLoadingPlugin() {
-        MixinBootstrapRequirement.initialize(
-                CaveBiomesLoadingPlugin.class.getClassLoader());
-    }
-
     @Override public String[] getASMTransformerClass() { return null; }
     @Override public String getModContainerClass() { return null; }
     @Override public String getSetupClass() { return null; }
-    @Override public void injectData(Map<String, Object> data) {}
+    @Override public void injectData(Map<String, Object> data) {
+        MixinBootstrapRequirement.initialize(Launch.classLoader);
+    }
     @Override public String getAccessTransformerClass() { return null; }
 }

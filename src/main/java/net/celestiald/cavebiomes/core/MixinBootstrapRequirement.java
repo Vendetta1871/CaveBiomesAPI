@@ -3,9 +3,8 @@ package net.celestiald.cavebiomes.core;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-/** Loads the external launch library with a useful diagnostic when it is missing or incompatible. */
+/** Registers the mixin config through the compatible provider already initialized by Forge. */
 final class MixinBootstrapRequirement {
-    private static final String BOOTSTRAP = "org.spongepowered.asm.launch.MixinBootstrap";
     private static final String MIXINS = "org.spongepowered.asm.mixin.Mixins";
     private static final String CONFIGURATION = "mixins.cavebiomes.json";
 
@@ -14,8 +13,6 @@ final class MixinBootstrapRequirement {
 
     static void initialize(ClassLoader loader) {
         try {
-            Class<?> bootstrap = Class.forName(BOOTSTRAP, true, loader);
-            invoke(bootstrap.getMethod("init"), null);
             Class<?> mixins = Class.forName(MIXINS, true, loader);
             invoke(mixins.getMethod("addConfiguration", String.class),
                     null, CONFIGURATION);
@@ -37,13 +34,13 @@ final class MixinBootstrapRequirement {
             if (cause instanceof Error) {
                 throw (Error) cause;
             }
-            throw new IllegalStateException("MixinBootstrap initialization failed", cause);
+            throw new IllegalStateException("Mixin configuration registration failed", cause);
         }
     }
 
     private static IllegalStateException missing(Throwable cause) {
-        return new IllegalStateException("CaveBiomesAPI requires MixinBootstrap 1.1.0. "
-                + "Install its jar in the client and dedicated-server mods directories before "
-                + "starting Forge 1.12.2.", cause);
+        return new IllegalStateException("CaveBiomesAPI requires MixinBootstrap 1.1.0 or "
+                + "MixinBooter. Install a compatible provider in the client and dedicated-server "
+                + "mods directories before starting Forge 1.12.2.", cause);
     }
 }
