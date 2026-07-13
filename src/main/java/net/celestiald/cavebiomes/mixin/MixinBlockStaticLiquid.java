@@ -87,7 +87,10 @@ public abstract class MixinBlockStaticLiquid {
     @Redirect(
             method = "getCanBlockBurn",
             at = @At(value = "INVOKE", target = BLOCK_POS_Y, ordinal = 0),
-            require = 1,
+            // Fluidlogged API replaces this method with a hook that calls
+            // World.isOutsideBuildHeight, which MixinWorld already extends.
+            require = 0,
+            expect = 0,
             allow = 1)
     private int cavebiomes$flammableCandidateFloor(BlockPos candidate, World world,
             BlockPos checkedPos) {
@@ -98,7 +101,8 @@ public abstract class MixinBlockStaticLiquid {
     @Redirect(
             method = "getCanBlockBurn",
             at = @At(value = "INVOKE", target = BLOCK_POS_Y, ordinal = 1),
-            require = 1,
+            require = 0,
+            expect = 0,
             allow = 1)
     private int cavebiomes$flammableCandidateCeiling(BlockPos candidate, World world,
             BlockPos checkedPos) {
