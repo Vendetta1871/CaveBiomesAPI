@@ -44,7 +44,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import javax.annotation.Nullable;
 
-@Mixin(Chunk.class)
+// Apply below the default priority so other mods can inject into the extended
+// implementations merged here, as Moving Elevators does for setBlockState.
+@Mixin(value = Chunk.class, priority = 999)
 public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
 
     // ---- Shadowed fields ----
