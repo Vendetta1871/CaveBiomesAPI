@@ -22,7 +22,9 @@ import javax.annotation.Nullable;
  * With a negative grid origin (minY < 0) that render-chunk Y is negative, so the
  * index becomes negative -> ArrayIndexOutOfBoundsException. getY() is called
  * exactly once in renderEntities (for this index), so redirect it to the
- * minY-shifted value, mapping the row into [0, sectionCount).
+ * minY-shifted value, mapping the row into [0, sectionCount). Clamp the result
+ * because OptiFine and entity-render hooks can retain a render chunk for one
+ * frame while the view frustum is being rebuilt or torn down.
  */
 @Mixin(RenderGlobal.class)
 public abstract class MixinRenderGlobal {
@@ -33,7 +35,9 @@ public abstract class MixinRenderGlobal {
     @Redirect(method = "renderEntities",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/util/math/BlockPos;getY()I"))
     private int cavebiomes$entityListRowY(BlockPos pos) {
-        return pos.getY() - WorldHeightAPI.getMinY();
+        int shiftedY = pos.getY() - WorldHeightAPI.getMinY();
+        int highestShiftedY = WorldHeightAPI.getMaxY() - WorldHeightAPI.getMinY() - 1;
+        return MathHelper.clamp(shiftedY, 0, highestShiftedY);
     }
 
     // =========================================================================
