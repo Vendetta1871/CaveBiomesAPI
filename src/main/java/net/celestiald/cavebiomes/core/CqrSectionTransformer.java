@@ -9,6 +9,9 @@ import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.IincInsnNode;
 import org.objectweb.asm.tree.IntInsnNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.JumpInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TypeInsnNode;
@@ -23,6 +26,14 @@ public final class CqrSectionTransformer implements IClassTransformer {
             + "generation.util.BlockLightUtil";
     private static final String SKY_LIGHT = "team.cqr.cqrepoured.world.structure.generation."
             + "generation.util.SkyLightUtil";
+    private static final String GENERATABLE_DUNGEON =
+            "team.cqr.cqrepoured.world.structure.generation.generation.GeneratableDungeon";
+    private static final String BLOCK_ADDED = "team.cqr.cqrepoured.world.structure.generation."
+            + "generation.util.BlockAddedUtil";
+    private static final String CACHED_BLOCK_ACCESS =
+            "team.cqr.cqrepoured.client.occlusion.CachedBlockAccess";
+    private static final String STRUCTURE_UPPER =
+            "team.cqr.cqrepoured.util.datafixer.StructureUpper";
 
     private static final String SECTION_PLACEMENT_DESC = "(Lnet/minecraft/world/World;III"
             + "Lteam/cqr/cqrepoured/world/structure/generation/generation/GeneratableDungeon;"
@@ -37,6 +48,16 @@ public final class CqrSectionTransformer implements IClassTransformer {
             "(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;)V";
     private static final String SKY_LIGHT_DESC = "(Lnet/minecraft/world/World;"
             + "Lteam/cqr/cqrepoured/world/structure/generation/generation/ChunkInfo;)V";
+    private static final String WORLD_DESC = "(Lnet/minecraft/world/World;)V";
+    private static final String CHUNK_SECTION_CONSUMER_DESC =
+            "(Lnet/minecraft/world/chunk/Chunk;I)V";
+    private static final String CHUNK_WORLD_SECTION_CONSUMER_DESC =
+            "(Lnet/minecraft/world/chunk/Chunk;Lnet/minecraft/world/World;I)V";
+    private static final String CACHED_SECTION_GETTER_DESC = "(Lnet/minecraft/world/World;III)L"
+            + "net/minecraft/world/chunk/storage/ExtendedBlockStorage;";
+    private static final String STRUCTURE_SET_BLOCK_DESC = "(Lnet/minecraft/world/World;"
+            + "Ljava/util/Map;Lnet/minecraft/util/math/BlockPos;"
+            + "Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/nbt/NBTTagCompound;)V";
 
     private static final String CHUNK = "net/minecraft/world/chunk/Chunk";
     private static final String STORAGE =
@@ -59,7 +80,11 @@ public final class CqrSectionTransformer implements IClassTransformer {
         if (BLOCK_PLACING.equals(target)) patchBlockPlacing(node);
         else if (BLOCK_POS.equals(target)) patchBlockPosUtil(node);
         else if (BLOCK_LIGHT.equals(target)) patchBlockLight(node);
-        else patchSkyLight(node);
+        else if (SKY_LIGHT.equals(target)) patchSkyLight(node);
+        else if (GENERATABLE_DUNGEON.equals(target)) patchGeneratableDungeon(node);
+        else if (BLOCK_ADDED.equals(target)) patchBlockAdded(node);
+        else if (CACHED_BLOCK_ACCESS.equals(target)) patchCachedBlockAccess(node);
+        else patchStructureUpper(node);
 
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
@@ -67,7 +92,8 @@ public final class CqrSectionTransformer implements IClassTransformer {
     }
 
     private static String target(String name, String transformedName) {
-        for (String candidate : new String[]{BLOCK_PLACING, BLOCK_POS, BLOCK_LIGHT, SKY_LIGHT}) {
+        for (String candidate : new String[]{BLOCK_PLACING, BLOCK_POS, BLOCK_LIGHT, SKY_LIGHT,
+                GENERATABLE_DUNGEON, BLOCK_ADDED, CACHED_BLOCK_ACCESS, STRUCTURE_UPPER}) {
             if (candidate.equals(name) || candidate.equals(transformedName)) return candidate;
         }
         return null;
@@ -222,6 +248,13 @@ public final class CqrSectionTransformer implements IClassTransformer {
         validateBlockYBase(method, BLOCK_LIGHT + ".relightBlock", MUTABLE_POS_INTERNAL, -1);
         replaceWorldYShift(method, readShift);
         replaceWorldYShift(method, writeShift);
+
+        MethodNode sectionScan = uniqueMethod(node, "lambda$checkBlockLight$0",
+                CHUNK_WORLD_SECTION_CONSUMER_DESC);
+        patchDirectSectionRead(sectionScan, BLOCK_LIGHT + ".lambda$checkBlockLight$0", 2);
+        if (countSectionYReconstruction(sectionScan, 2) != 1) {
+            throw failure(BLOCK_LIGHT, "unexpected block-light world-Y reconstruction count");
+        }
     }
 
     private static void patchSkyLight(ClassNode node) {
@@ -239,11 +272,182 @@ public final class CqrSectionTransformer implements IClassTransformer {
             index = (VarInsnNode) instruction;
         }
         if (index == null) throw failure(SKY_LIGHT, "no section-loop read");
-        validateTopMarkedLoop(method);
+        validateTopMarkedLoop(method, SKY_LIGHT, 3);
         if (countSectionYReconstruction(method, 3) != 2) {
             throw failure(SKY_LIGHT, "unexpected world-Y reconstruction count");
         }
         method.instructions.insert(index, heightCall("sectionIndexFromSectionY"));
+    }
+
+    private static void patchGeneratableDungeon(ClassNode node) {
+        MethodNode method = uniqueMethod(node, "tryGeneratePart", WORLD_DESC);
+        VarInsnNode readIndex = null;
+        VarInsnNode writeIndex = null;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (!(instruction instanceof VarInsnNode)
+                    || instruction.getOpcode() != Opcodes.ILOAD
+                    || ((VarInsnNode) instruction).var != 7
+                    || !isStorageGetter(previousReal(instruction))) {
+                continue;
+            }
+            AbstractInsnNode next = nextReal(instruction);
+            if (next.getOpcode() == Opcodes.AALOAD) {
+                if (readIndex != null) {
+                    throw failure(GENERATABLE_DUNGEON, "multiple skylight section reads");
+                }
+                readIndex = (VarInsnNode) instruction;
+            } else if (next instanceof VarInsnNode && next.getOpcode() == Opcodes.ALOAD
+                    && ((VarInsnNode) next).var == 8
+                    && nextReal(next).getOpcode() == Opcodes.AASTORE) {
+                if (writeIndex != null) {
+                    throw failure(GENERATABLE_DUNGEON, "multiple skylight section writes");
+                }
+                writeIndex = (VarInsnNode) instruction;
+            } else {
+                throw failure(GENERATABLE_DUNGEON, "unexpected skylight section-array operation");
+            }
+        }
+        if (readIndex == null || writeIndex == null) {
+            throw failure(GENERATABLE_DUNGEON, "expected one skylight section read and write");
+        }
+        validateSectionYBase(method, GENERATABLE_DUNGEON + ".tryGeneratePart", 7);
+        validateTopMarkedLoop(method, GENERATABLE_DUNGEON, 7);
+        method.instructions.insert(readIndex, heightCall("sectionIndexFromSectionY"));
+        method.instructions.insert(writeIndex, heightCall("sectionIndexFromSectionY"));
+
+        MethodNode sectionScan = uniqueMethod(node, "lambda$tryGeneratePart$0",
+                CHUNK_SECTION_CONSUMER_DESC);
+        patchDirectSectionRead(sectionScan,
+                GENERATABLE_DUNGEON + ".lambda$tryGeneratePart$0", 1);
+    }
+
+    private static void patchBlockAdded(ClassNode node) {
+        MethodNode method = uniqueMethod(node, "lambda$onBlockAdded$1",
+                CHUNK_WORLD_SECTION_CONSUMER_DESC);
+        VarInsnNode currentIndex = null;
+        AbstractInsnNode previousIndex = null;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (!(instruction instanceof VarInsnNode)
+                    || instruction.getOpcode() != Opcodes.ILOAD
+                    || ((VarInsnNode) instruction).var != 2
+                    || !isStorageGetter(previousReal(instruction))) {
+                continue;
+            }
+            AbstractInsnNode next = nextReal(instruction);
+            if (next.getOpcode() == Opcodes.AALOAD) {
+                if (currentIndex != null) {
+                    throw failure(BLOCK_ADDED, "multiple current-section reads");
+                }
+                currentIndex = (VarInsnNode) instruction;
+            } else if (next.getOpcode() == Opcodes.ICONST_1
+                    && nextReal(next).getOpcode() == Opcodes.ISUB
+                    && nextReal(nextReal(next)).getOpcode() == Opcodes.AALOAD) {
+                if (previousIndex != null) {
+                    throw failure(BLOCK_ADDED, "multiple previous-section reads");
+                }
+                previousIndex = nextReal(next);
+            } else {
+                throw failure(BLOCK_ADDED, "unexpected section-array operation");
+            }
+        }
+        if (currentIndex == null || previousIndex == null) {
+            throw failure(BLOCK_ADDED, "expected current and previous section reads");
+        }
+        validateZeroPreviousGuard(method);
+        method.instructions.insert(currentIndex, heightCall("sectionIndexFromSectionY"));
+        method.instructions.insert(previousIndex, heightCall("sectionIndexFromSectionY"));
+    }
+
+    private static void patchCachedBlockAccess(ClassNode node) {
+        MethodNode method = uniqueMethod(node, "lambda$init$2", CACHED_SECTION_GETTER_DESC);
+        JumpInsnNode lowerBound = null;
+        JumpInsnNode upperBound = null;
+        AbstractInsnNode upperConstant = null;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (!(instruction instanceof JumpInsnNode)) continue;
+            if (instruction.getOpcode() == Opcodes.IFLT) {
+                AbstractInsnNode sectionY = previousReal(instruction);
+                if (sectionY instanceof VarInsnNode && sectionY.getOpcode() == Opcodes.ILOAD
+                        && ((VarInsnNode) sectionY).var == 2) {
+                    if (lowerBound != null) {
+                        throw failure(CACHED_BLOCK_ACCESS, "multiple lower section bounds");
+                    }
+                    lowerBound = (JumpInsnNode) instruction;
+                }
+            } else if (instruction.getOpcode() == Opcodes.IF_ICMPLT) {
+                AbstractInsnNode limit = previousReal(instruction);
+                AbstractInsnNode sectionY = previousReal(limit);
+                if (limit instanceof IntInsnNode && limit.getOpcode() == Opcodes.BIPUSH
+                        && ((IntInsnNode) limit).operand == 16
+                        && sectionY instanceof VarInsnNode
+                        && sectionY.getOpcode() == Opcodes.ILOAD
+                        && ((VarInsnNode) sectionY).var == 2) {
+                    if (upperBound != null) {
+                        throw failure(CACHED_BLOCK_ACCESS, "multiple upper section bounds");
+                    }
+                    upperBound = (JumpInsnNode) instruction;
+                    upperConstant = limit;
+                }
+            }
+        }
+        if (lowerBound == null || upperBound == null || upperConstant == null) {
+            throw failure(CACHED_BLOCK_ACCESS, "expected legacy 0..15 section bounds");
+        }
+
+        AbstractInsnNode lowerSectionY = previousReal(lowerBound);
+        method.instructions.insert(lowerSectionY, heightCallNoArg("getMinSection"));
+        method.instructions.set(lowerBound,
+                new JumpInsnNode(Opcodes.IF_ICMPLT, lowerBound.label));
+
+        MethodInsnNode minimum = heightCallNoArg("getMinSection");
+        method.instructions.set(upperConstant, minimum);
+        method.instructions.insert(minimum, heightRangeEnd());
+
+        patchDirectSectionRead(method, CACHED_BLOCK_ACCESS + ".lambda$init$2", 2);
+    }
+
+    private static void patchStructureUpper(ClassNode node) {
+        MethodNode method = uniqueMethod(node, "setBlock", STRUCTURE_SET_BLOCK_DESC);
+        int storageVariable = storageArrayLocal(method, STRUCTURE_UPPER + ".setBlock");
+        if (storageVariable != 6) {
+            throw failure(STRUCTURE_UPPER, "unexpected storage-array local " + storageVariable);
+        }
+
+        AbstractInsnNode readShift = null;
+        AbstractInsnNode writeShift = null;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (instruction.getOpcode() != Opcodes.ISHR) continue;
+            AbstractInsnNode amount = previousReal(instruction);
+            AbstractInsnNode getY = previousReal(amount);
+            AbstractInsnNode pos = previousReal(getY);
+            AbstractInsnNode array = previousReal(pos);
+            if (amount.getOpcode() != Opcodes.ICONST_4
+                    || !isGetY(getY, BLOCK_POS_INTERNAL)
+                    || !(pos instanceof VarInsnNode) || pos.getOpcode() != Opcodes.ALOAD
+                    || ((VarInsnNode) pos).var != 2
+                    || !(array instanceof VarInsnNode) || array.getOpcode() != Opcodes.ALOAD
+                    || ((VarInsnNode) array).var != storageVariable) {
+                continue;
+            }
+            AbstractInsnNode next = nextReal(instruction);
+            if (next.getOpcode() == Opcodes.AALOAD) {
+                if (readShift != null) throw failure(STRUCTURE_UPPER, "multiple section reads");
+                readShift = instruction;
+            } else if (next instanceof VarInsnNode && next.getOpcode() == Opcodes.ALOAD
+                    && ((VarInsnNode) next).var == 7
+                    && nextReal(next).getOpcode() == Opcodes.AASTORE) {
+                if (writeShift != null) throw failure(STRUCTURE_UPPER, "multiple section writes");
+                writeShift = instruction;
+            } else {
+                throw failure(STRUCTURE_UPPER, "unexpected section-array operation");
+            }
+        }
+        if (readShift == null || writeShift == null) {
+            throw failure(STRUCTURE_UPPER, "expected one section read and write");
+        }
+        validateBlockYBase(method, STRUCTURE_UPPER + ".setBlock", BLOCK_POS_INTERNAL, 2);
+        replaceWorldYShift(method, readShift);
+        replaceWorldYShift(method, writeShift);
     }
 
     private static void validateSectionYBase(MethodNode method, String target, int sectionVariable) {
@@ -352,30 +556,65 @@ public final class CqrSectionTransformer implements IClassTransformer {
         }
     }
 
-    private static void validateTopMarkedLoop(MethodNode method) {
+    private static void validateTopMarkedLoop(MethodNode method, String target, int loopVariable) {
         int starts = 0;
         int decrements = 0;
         int limits = 0;
         for (AbstractInsnNode instruction : method.instructions.toArray()) {
             if (instruction instanceof VarInsnNode && instruction.getOpcode() == Opcodes.ISTORE
-                    && ((VarInsnNode) instruction).var == 3) {
+                    && ((VarInsnNode) instruction).var == loopVariable) {
                 AbstractInsnNode callInstruction = previousReal(instruction);
                 if (callInstruction instanceof MethodInsnNode
                         && "topMarked".equals(((MethodInsnNode) callInstruction).name)
                         && "()I".equals(((MethodInsnNode) callInstruction).desc)) starts++;
             } else if (instruction instanceof IincInsnNode
-                    && ((IincInsnNode) instruction).var == 3
+                    && ((IincInsnNode) instruction).var == loopVariable
                     && ((IincInsnNode) instruction).incr == -1) {
                 decrements++;
             } else if (instruction.getOpcode() == Opcodes.IFLT) {
                 AbstractInsnNode load = previousReal(instruction);
                 if (load instanceof VarInsnNode && load.getOpcode() == Opcodes.ILOAD
-                        && ((VarInsnNode) load).var == 3) limits++;
+                        && ((VarInsnNode) load).var == loopVariable) limits++;
             }
         }
         if (starts != 1 || decrements != 1 || limits != 1) {
-            throw failure(SKY_LIGHT, "unexpected legacy top-marked loop");
+            throw failure(target, "unexpected legacy top-marked loop");
         }
+    }
+
+    private static void validateZeroPreviousGuard(MethodNode method) {
+        int matches = 0;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (instruction.getOpcode() != Opcodes.IFNE) continue;
+            AbstractInsnNode sectionY = previousReal(instruction);
+            if (sectionY instanceof VarInsnNode && sectionY.getOpcode() == Opcodes.ILOAD
+                    && ((VarInsnNode) sectionY).var == 2
+                    && nextReal(instruction).getOpcode() == Opcodes.ACONST_NULL) {
+                matches++;
+            }
+        }
+        if (matches != 1) {
+            throw failure(BLOCK_ADDED, "expected legacy section-zero previous-section guard");
+        }
+    }
+
+    private static void patchDirectSectionRead(MethodNode method, String target,
+            int sectionVariable) {
+        VarInsnNode index = null;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            AbstractInsnNode getter = previousRealOrNull(instruction);
+            if (!(instruction instanceof VarInsnNode)
+                    || instruction.getOpcode() != Opcodes.ILOAD
+                    || ((VarInsnNode) instruction).var != sectionVariable
+                    || !isStorageGetter(getter)
+                    || nextReal(instruction).getOpcode() != Opcodes.AALOAD) {
+                continue;
+            }
+            if (index != null) throw failure(target, "multiple direct section reads");
+            index = (VarInsnNode) instruction;
+        }
+        if (index == null) throw failure(target, "no direct section read");
+        method.instructions.insert(index, heightCall("sectionIndexFromSectionY"));
     }
 
     private static int countSectionYReconstruction(MethodNode method, int sectionVariable) {
@@ -486,12 +725,29 @@ public final class CqrSectionTransformer implements IClassTransformer {
         return new MethodInsnNode(Opcodes.INVOKESTATIC, HEIGHT_API, method, "(I)I", false);
     }
 
+    private static MethodInsnNode heightCallNoArg(String method) {
+        return new MethodInsnNode(Opcodes.INVOKESTATIC, HEIGHT_API, method, "()I", false);
+    }
+
+    private static InsnList heightRangeEnd() {
+        InsnList instructions = new InsnList();
+        instructions.add(heightCallNoArg("getSectionCount"));
+        instructions.add(new InsnNode(Opcodes.IADD));
+        return instructions;
+    }
+
     private static AbstractInsnNode previousReal(AbstractInsnNode start) {
+        AbstractInsnNode instruction = previousRealOrNull(start);
+        if (instruction != null) return instruction;
+        throw failure("bytecode", "no preceding instruction");
+    }
+
+    private static AbstractInsnNode previousRealOrNull(AbstractInsnNode start) {
         for (AbstractInsnNode instruction = start.getPrevious(); instruction != null;
                 instruction = instruction.getPrevious()) {
             if (instruction.getOpcode() >= 0) return instruction;
         }
-        throw failure("bytecode", "no preceding instruction");
+        return null;
     }
 
     private static AbstractInsnNode nextReal(AbstractInsnNode start) {
