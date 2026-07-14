@@ -14,7 +14,8 @@ public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
         return new String[]{
                 NetworkQueueRaceTransformer.class.getName(),
                 ClientBlockChangeGuardTransformer.class.getName(),
-                OptiFineRenderChunkTransformer.class.getName()
+                OptiFineRenderChunkTransformer.class.getName(),
+                OptiFineChunkVisibilityTransformer.class.getName()
         };
     }
     @Override public String getModContainerClass() { return null; }
