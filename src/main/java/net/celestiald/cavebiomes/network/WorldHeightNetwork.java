@@ -1,10 +1,11 @@
 package net.celestiald.cavebiomes.network;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
@@ -18,6 +19,7 @@ public final class WorldHeightNetwork {
             NetworkRegistry.INSTANCE.newSimpleChannel("cavebiomes:height");
     private static final WorldHeightNetwork INSTANCE = new WorldHeightNetwork();
     private static boolean initialized;
+    private volatile boolean resetClientRangeWhenWorldCloses;
 
     private WorldHeightNetwork() {}
 
@@ -43,15 +45,23 @@ public final class WorldHeightNetwork {
     @SubscribeEvent
     @SideOnly(Side.CLIENT)
     public void clientConnected(FMLNetworkEvent.ClientConnectedToServerEvent event) {
+        resetClientRangeWhenWorldCloses = false;
         WorldHeightAPI.resetToConfiguredRange();
     }
 
     @SubscribeEvent
     @SideOnly(Side.CLIENT)
-    public void clientWorldUnloaded(WorldEvent.Unload event) {
-        if (event.getWorld().isRemote) {
-            // The network disconnect event can run while RenderGlobal still owns the old world.
-            // Keep its negotiated height active until the client has actually released that world.
+    public void clientDisconnected(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
+        resetClientRangeWhenWorldCloses = true;
+    }
+
+    @SubscribeEvent
+    @SideOnly(Side.CLIENT)
+    public void clientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.END
+                && resetClientRangeWhenWorldCloses
+                && Minecraft.getMinecraft().world == null) {
+            resetClientRangeWhenWorldCloses = false;
             WorldHeightAPI.resetToConfiguredRange();
         }
     }
