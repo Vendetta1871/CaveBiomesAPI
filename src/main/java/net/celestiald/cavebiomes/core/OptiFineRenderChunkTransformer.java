@@ -37,6 +37,7 @@ public final class OptiFineRenderChunkTransformer implements IClassTransformer {
                 false));
         method.instructions.remove(shiftAmount);
         method.instructions.remove(shift);
+        guardSectionArrayAccess(method);
 
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
@@ -57,6 +58,33 @@ public final class OptiFineRenderChunkTransformer implements IClassTransformer {
             throw failure("no getCountBlocks method");
         }
         return result;
+    }
+
+    private static void guardSectionArrayAccess(MethodNode method) {
+        InsnNode arrayLoad = null;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (instruction instanceof InsnNode && instruction.getOpcode() == Opcodes.AALOAD) {
+                if (arrayLoad != null) {
+                    throw failure("multiple section array reads in getCountBlocks");
+                }
+                arrayLoad = (InsnNode) instruction;
+            }
+        }
+        if (arrayLoad == null) {
+            throw failure("no section array read in getCountBlocks");
+        }
+
+        // Stack before AALOAD is [sections, index]. Preserve the array while
+        // passing the index and the array's real length through a bounds helper.
+        method.instructions.insertBefore(arrayLoad, new InsnNode(Opcodes.DUP2));
+        method.instructions.insertBefore(arrayLoad, new InsnNode(Opcodes.POP));
+        method.instructions.insertBefore(arrayLoad, new InsnNode(Opcodes.ARRAYLENGTH));
+        method.instructions.insertBefore(arrayLoad, new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                "net/celestiald/cavebiomes/core/OptiFineRenderCompat",
+                "clampSectionIndex",
+                "(II)I",
+                false));
     }
 
     private static InsnNode uniqueSectionShift(MethodNode method) {
