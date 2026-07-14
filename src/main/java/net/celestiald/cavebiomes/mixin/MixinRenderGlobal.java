@@ -9,10 +9,10 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
-
-import javax.annotation.Nullable;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Extends vanilla's render-chunk traversal beyond Y 0..255. Kept separate from
@@ -31,24 +31,33 @@ public abstract class MixinRenderGlobal {
     // confines the flood fill to [0,256): sections above/below are never added
     // to the render list, so only the player's own section renders ("phantom"
     // chunks that fill in only once you enter them). Widen the guard to
-    // [minY, maxY). @Overwrite (not @ModifyConstant): the SpongePowered AP does
-    // not emit a refmap entry for this method name, so a string-based injector
-    // would silently fail in a reobfuscated build — whereas an @Overwrite is
-    // reobfuscated by symbol, the same approach used in MixinViewFrustum.
+    // [minY, maxY). OptiFine replaces this private helper with a different
+    // signature, so the injection is intentionally optional there.
     // =========================================================================
 
-    @Nullable
-    @Overwrite
-    private RenderChunk getRenderChunkOffset(BlockPos playerPos, RenderChunk renderChunkBase, EnumFacing facing) {
+    @Inject(
+            method = "getRenderChunkOffset(Lnet/minecraft/util/math/BlockPos;"
+                    + "Lnet/minecraft/client/renderer/chunk/RenderChunk;"
+                    + "Lnet/minecraft/util/EnumFacing;)"
+                    + "Lnet/minecraft/client/renderer/chunk/RenderChunk;",
+            at = @At("HEAD"),
+            cancellable = true,
+            require = 0)
+    private void cavebiomes$getRenderChunkOffset(BlockPos playerPos,
+            RenderChunk renderChunkBase, EnumFacing facing,
+            CallbackInfoReturnable<RenderChunk> cir) {
         BlockPos blockpos = renderChunkBase.getBlockPosOffset16(facing);
 
         if (MathHelper.abs(playerPos.getX() - blockpos.getX()) > this.renderDistanceChunks * 16) {
-            return null;
+            cir.setReturnValue(null);
         } else if (blockpos.getY() >= WorldHeightAPI.getMinY() && blockpos.getY() < WorldHeightAPI.getMaxY()) {
-            return MathHelper.abs(playerPos.getZ() - blockpos.getZ()) > this.renderDistanceChunks * 16
-                    ? null : ((IViewFrustumExt) (Object) this.viewFrustum).cavebiomes$getRenderChunk(blockpos);
+            cir.setReturnValue(MathHelper.abs(playerPos.getZ() - blockpos.getZ())
+                    > this.renderDistanceChunks * 16
+                    ? null
+                    : ((IViewFrustumExt) (Object) this.viewFrustum)
+                            .cavebiomes$getRenderChunk(blockpos));
         } else {
-            return null;
+            cir.setReturnValue(null);
         }
     }
 }
