@@ -96,7 +96,8 @@ public abstract class MixinPlayerChunkMapEntry {
                     BlockPos blockpos = new BlockPos(wx, wy, wz);
 
                     this.sendPacket(new SPacketBlockChange(world, blockpos));
-                    if (world.getBlockState(blockpos).getBlock().hasTileEntity()) {
+                    IBlockState state = world.getBlockState(blockpos);
+                    if (state.getBlock().hasTileEntity(state)) {
                         this.sendBlockEntity(world.getTileEntity(blockpos));
                     }
                 } else if (this.changes < this.cavebiomes$changed.length
