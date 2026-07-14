@@ -21,7 +21,8 @@ public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
                 XaeroMapTransformer.class.getName(),
                 LegacyModSectionTransformer.class.getName(),
                 LegacyWorldgenSectionTransformer.class.getName(),
-                LegacyPlacementSectionTransformer.class.getName()
+                LegacyPlacementSectionTransformer.class.getName(),
+                CqrSectionTransformer.class.getName()
         };
     }
     @Override public String getModContainerClass() { return null; }
