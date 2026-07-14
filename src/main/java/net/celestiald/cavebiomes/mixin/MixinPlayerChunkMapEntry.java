@@ -5,6 +5,7 @@ import net.celestiald.cavebiomes.api.ExtendedChunkAPI;
 import net.minecraft.network.Packet;
 import net.minecraft.network.play.server.SPacketBlockChange;
 import net.minecraft.network.play.server.SPacketChunkData;
+import net.minecraft.network.play.server.SPacketMultiBlockChange;
 import net.minecraft.server.management.PlayerChunkMap;
 import net.minecraft.server.management.PlayerChunkMapEntry;
 import net.minecraft.tileentity.TileEntity;
@@ -97,8 +98,22 @@ public abstract class MixinPlayerChunkMapEntry {
                     if (world.getBlockState(blockpos).getBlock().hasTileEntity()) {
                         this.sendBlockEntity(world.getTileEntity(blockpos));
                     }
+                } else if (this.changes < this.cavebiomes$changed.length
+                        && this.cavebiomes$allChangesFitVanillaHeight()) {
+                    // Keep vanilla's compact batch for surface updates. This matters in active
+                    // modded bases where resending whole sections every tick floods the client.
+                    short[] changedBlocks = new short[this.changes];
+                    for (int i = 0; i < this.changes; ++i) {
+                        int packed = this.cavebiomes$changed[i];
+                        int x = (packed >>> 28) & 15;
+                        int y = (packed & 0xFFFFFF) + WorldHeightAPI.getMinY();
+                        int z = (packed >>> 24) & 15;
+                        changedBlocks[i] = (short) (x << 12 | z << 8 | y);
+                    }
+                    this.sendPacket(new SPacketMultiBlockChange(this.changes, changedBlocks, this.chunk));
                 } else {
-                    // SPacketMultiBlockChange packs Y in 8 bits → resend sections instead.
+                    // Extended-height updates and saturated batches cannot use the vanilla
+                    // packet's eight-bit Y field, so resend only their affected sections.
                     this.sendPacket(new SPacketChunkData(this.chunk, this.changedSectionFilter));
                 }
 
@@ -106,5 +121,16 @@ public abstract class MixinPlayerChunkMapEntry {
                 this.changedSectionFilter = 0;
             }
         }
+    }
+
+    @Unique
+    private boolean cavebiomes$allChangesFitVanillaHeight() {
+        for (int i = 0; i < this.changes; ++i) {
+            int y = (this.cavebiomes$changed[i] & 0xFFFFFF) + WorldHeightAPI.getMinY();
+            if (y < 0 || y > 255) {
+                return false;
+            }
+        }
+        return true;
     }
 }
