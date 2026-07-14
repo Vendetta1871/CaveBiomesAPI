@@ -263,6 +263,7 @@ public final class LegacyModSectionTransformer implements IClassTransformer {
         method.instructions.insert(worldYLimit, heightCall("sectionIndex"));
         method.instructions.set(shiftAmount, heightCall("sectionYBase"));
         method.instructions.remove(yShift);
+        patchSingleSectionRead(method, ASTEROIDS, CHUNK, 13);
     }
 
     private static void patchAsmodeusLight(ClassNode node) {
