@@ -12,10 +12,14 @@ import org.objectweb.asm.tree.MethodNode;
 /** Prevents queued block changes from touching a client world after disconnect. */
 public final class ClientBlockChangeGuardTransformer implements IClassTransformer {
     private static final String TARGET = "net.minecraft.client.network.NetHandlerPlayClient";
-    private static final String MCP_METHOD = "handleBlockChange";
-    private static final String SRG_METHOD = "func_147234_a";
-    private static final String HANDLER_DESC =
+    private static final String MCP_BLOCK_METHOD = "handleBlockChange";
+    private static final String SRG_BLOCK_METHOD = "func_147234_a";
+    private static final String BLOCK_HANDLER_DESC =
             "(Lnet/minecraft/network/play/server/SPacketBlockChange;)V";
+    private static final String MCP_MULTI_METHOD = "handleMultiBlockChange";
+    private static final String SRG_MULTI_METHOD = "func_147287_a";
+    private static final String MULTI_HANDLER_DESC =
+            "(Lnet/minecraft/network/play/server/SPacketMultiBlockChange;)V";
     private static final String WORLD = "net/minecraft/client/multiplayer/WorldClient";
     private static final String BLOCK_CHANGE_DESC =
             "(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z";
@@ -32,32 +36,39 @@ public final class ClientBlockChangeGuardTransformer implements IClassTransforme
 
         ClassNode node = new ClassNode(Opcodes.ASM5);
         new ClassReader(basicClass).accept(node, 0);
-        MethodNode method = uniqueHandler(node);
-        MethodInsnNode blockChange = uniqueBlockChangeCall(method);
-        blockChange.setOpcode(Opcodes.INVOKESTATIC);
-        blockChange.owner = HOOK;
-        blockChange.name = "apply";
-        blockChange.desc = HOOK_DESC;
-        blockChange.itf = false;
+        replaceBlockChangeCall(uniqueHandler(node, MCP_BLOCK_METHOD, SRG_BLOCK_METHOD,
+                BLOCK_HANDLER_DESC));
+        replaceBlockChangeCall(uniqueHandler(node, MCP_MULTI_METHOD, SRG_MULTI_METHOD,
+                MULTI_HANDLER_DESC));
 
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
         return writer.toByteArray();
     }
 
-    private static MethodNode uniqueHandler(ClassNode node) {
+    private static void replaceBlockChangeCall(MethodNode method) {
+        MethodInsnNode blockChange = uniqueBlockChangeCall(method);
+        blockChange.setOpcode(Opcodes.INVOKESTATIC);
+        blockChange.owner = HOOK;
+        blockChange.name = "apply";
+        blockChange.desc = HOOK_DESC;
+        blockChange.itf = false;
+    }
+
+    private static MethodNode uniqueHandler(ClassNode node, String mcpName, String srgName,
+            String descriptor) {
         MethodNode result = null;
         for (MethodNode method : node.methods) {
-            if (HANDLER_DESC.equals(method.desc)
-                    && (MCP_METHOD.equals(method.name) || SRG_METHOD.equals(method.name))) {
+            if (descriptor.equals(method.desc)
+                    && (mcpName.equals(method.name) || srgName.equals(method.name))) {
                 if (result != null) {
-                    throw failure("multiple matching block-change handlers");
+                    throw failure("multiple matching " + mcpName + " handlers");
                 }
                 result = method;
             }
         }
         if (result == null) {
-            throw failure("no matching block-change handler");
+            throw failure("no matching " + mcpName + " handler");
         }
         return result;
     }
