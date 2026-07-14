@@ -3,6 +3,7 @@ package net.celestiald.cavebiomes.network;
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
@@ -47,7 +48,11 @@ public final class WorldHeightNetwork {
 
     @SubscribeEvent
     @SideOnly(Side.CLIENT)
-    public void clientDisconnected(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
-        WorldHeightAPI.resetToConfiguredRange();
+    public void clientWorldUnloaded(WorldEvent.Unload event) {
+        if (event.getWorld().isRemote) {
+            // The network disconnect event can run while RenderGlobal still owns the old world.
+            // Keep its negotiated height active until the client has actually released that world.
+            WorldHeightAPI.resetToConfiguredRange();
+        }
     }
 }
