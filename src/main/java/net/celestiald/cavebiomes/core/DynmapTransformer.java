@@ -175,6 +175,7 @@ public final class DynmapTransformer implements IClassTransformer {
                 "(Lorg/dynmap/utils/BlockStep;)Lorg/dynmap/renderer/DynmapBlockState;"),
                 Opcodes.IFLE, Opcodes.IF_ICMPLE);
         replaceYDecrementBound(uniqueMethod(node, "stepPosition", "(Lorg/dynmap/utils/BlockStep;)V"));
+        normalizeBlockKey(uniqueMethod(node, "getBlockKey", "()J"));
         if (zeroMinimums != 1) {
             throw failure("OurMapIterator", "expected one ymin initializer, found " + zeroMinimums);
         }
@@ -209,6 +210,45 @@ public final class DynmapTransformer implements IClassTransformer {
             throw failure("OurMapIterator.stepPosition",
                     "expected one descending minimum-Y bound, found " + replaced);
         }
+    }
+
+    private static void normalizeBlockKey(MethodNode method) {
+        int stride = 0;
+        int offset = 0;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (instruction.getOpcode() == Opcodes.IMUL) {
+                AbstractInsnNode worldHeight = previousReal(instruction);
+                if (isField(worldHeight, Opcodes.GETFIELD, "worldheight")) {
+                    method.instructions.insertBefore(instruction, loadIteratorField("ymin"));
+                    method.instructions.insertBefore(instruction, new InsnNode(Opcodes.ISUB));
+                    stride++;
+                }
+            } else if (instruction.getOpcode() == Opcodes.IADD) {
+                AbstractInsnNode y = previousReal(instruction);
+                if (isField(y, Opcodes.GETFIELD, "y")) {
+                    method.instructions.insertBefore(instruction, loadIteratorField("ymin"));
+                    method.instructions.insertBefore(instruction, new InsnNode(Opcodes.ISUB));
+                    offset++;
+                }
+            }
+        }
+        if (stride != 1 || offset != 1) {
+            throw failure("OurMapIterator.getBlockKey", "expected one height stride and Y offset, found "
+                    + stride + " and " + offset);
+        }
+    }
+
+    private static InsnList loadIteratorField(String name) {
+        InsnList instructions = new InsnList();
+        instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        instructions.add(new FieldInsnNode(Opcodes.GETFIELD,
+                "org/dynmap/forge_1_12_2/ForgeMapChunkCache$OurMapIterator", name, "I"));
+        return instructions;
+    }
+
+    private static boolean isField(AbstractInsnNode instruction, int opcode, String name) {
+        return instruction instanceof FieldInsnNode && instruction.getOpcode() == opcode
+                && name.equals(((FieldInsnNode) instruction).name);
     }
 
     private static void transformForgeWorld(ClassNode node) {
