@@ -27,8 +27,22 @@ public final class LegacyModSectionTransformer implements IClassTransformer {
     private static final String ASTEROIDS_METHOD = "generateSkylightMap";
     private static final String ASTEROIDS_DESC =
             "(Lnet/minecraft/world/chunk/Chunk;II)V";
+    private static final String ASMODEUS_LIGHT =
+            "asmodeuscore.core.utils.worldengine.additions.WE_ChunkSmartLight";
+    private static final String ASMODEUS_LIGHT_INTERNAL =
+            "asmodeuscore/core/utils/worldengine/additions/WE_ChunkSmartLight";
+    private static final String ASMODEUS_METHOD_MCP = "generateSkylightMap";
+    private static final String ASMODEUS_METHOD_SRG = "func_76603_b";
+    private static final String ASMODEUS_DESC = "()V";
+
+    private static final String MO_CREATURES = "drzhark.mocreatures.MoCDespawner";
+    private static final String MO_CREATURES_METHOD = "getLightFromNeighbors";
+    private static final String MO_CREATURES_DESC =
+            "(Lnet/minecraft/world/chunk/Chunk;III)I";
+    private static final String CHUNK = "net/minecraft/world/chunk/Chunk";
     private static final String STORAGE =
             "net/minecraft/world/chunk/storage/ExtendedBlockStorage";
+    private static final String STORAGE_ARRAY_DESC = "()[L" + STORAGE + ";";
     private static final String HEIGHT_API =
             "net/celestiald/cavebiomes/api/WorldHeightAPI";
 
@@ -41,7 +55,9 @@ public final class LegacyModSectionTransformer implements IClassTransformer {
         ClassNode node = new ClassNode(Opcodes.ASM5);
         new ClassReader(basicClass).accept(node, 0);
         if (WARP_DRIVE.equals(target)) patchWarpDrive(node);
-        else patchAsteroids(node);
+        else if (ASTEROIDS.equals(target)) patchAsteroids(node);
+        else if (ASMODEUS_LIGHT.equals(target)) patchAsmodeusLight(node);
+        else patchMoCreatures(node);
 
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
@@ -54,6 +70,12 @@ public final class LegacyModSectionTransformer implements IClassTransformer {
         }
         if (ASTEROIDS.equals(name) || ASTEROIDS.equals(transformedName)) {
             return ASTEROIDS;
+        }
+        if (ASMODEUS_LIGHT.equals(name) || ASMODEUS_LIGHT.equals(transformedName)) {
+            return ASMODEUS_LIGHT;
+        }
+        if (MO_CREATURES.equals(name) || MO_CREATURES.equals(transformedName)) {
+            return MO_CREATURES;
         }
         return null;
     }
@@ -212,6 +234,55 @@ public final class LegacyModSectionTransformer implements IClassTransformer {
         method.instructions.remove(yShift);
     }
 
+    private static void patchAsmodeusLight(ClassNode node) {
+        MethodNode method = uniqueMethod(node, ASMODEUS_METHOD_MCP,
+                ASMODEUS_METHOD_SRG, ASMODEUS_DESC);
+        patchSingleSectionRead(method, ASMODEUS_LIGHT,
+                ASMODEUS_LIGHT_INTERNAL, 5);
+    }
+
+    private static void patchMoCreatures(ClassNode node) {
+        MethodNode method = uniqueMethod(node, MO_CREATURES_METHOD, MO_CREATURES_DESC);
+        patchSingleSectionRead(method, MO_CREATURES, CHUNK, 2);
+    }
+
+    private static void patchSingleSectionRead(MethodNode method, String target,
+            String getterOwner, int yVariable) {
+        AbstractInsnNode sectionShift = null;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (instruction.getOpcode() != Opcodes.ISHR) continue;
+            AbstractInsnNode shiftAmount = previousReal(instruction);
+            AbstractInsnNode yLoad = previousReal(shiftAmount);
+            AbstractInsnNode getterInstruction = previousReal(yLoad);
+            AbstractInsnNode arrayRead = nextReal(instruction);
+            if (shiftAmount.getOpcode() != Opcodes.ICONST_4
+                    || !(yLoad instanceof VarInsnNode)
+                    || yLoad.getOpcode() != Opcodes.ILOAD
+                    || ((VarInsnNode) yLoad).var != yVariable
+                    || !(getterInstruction instanceof MethodInsnNode)
+                    || arrayRead.getOpcode() != Opcodes.AALOAD) {
+                continue;
+            }
+
+            MethodInsnNode getter = (MethodInsnNode) getterInstruction;
+            if (getter.getOpcode() != Opcodes.INVOKEVIRTUAL
+                    || !getterOwner.equals(getter.owner)
+                    || !STORAGE_ARRAY_DESC.equals(getter.desc)
+                    || !("getBlockStorageArray".equals(getter.name)
+                        || "func_76587_i".equals(getter.name))) {
+                continue;
+            }
+            if (sectionShift != null) {
+                throw failure(target, "multiple raw section reads");
+            }
+            sectionShift = instruction;
+        }
+        if (sectionShift == null) {
+            throw failure(target, "expected one raw section read");
+        }
+        replaceSectionShift(method, sectionShift);
+    }
+
     private static MethodNode uniqueMethod(ClassNode node, String name, String desc) {
         MethodNode result = null;
         for (MethodNode method : node.methods) {
@@ -221,6 +292,24 @@ public final class LegacyModSectionTransformer implements IClassTransformer {
             }
         }
         if (result == null) throw failure(node.name, "no " + name + desc);
+        return result;
+    }
+
+    private static MethodNode uniqueMethod(ClassNode node, String mcpName,
+            String srgName, String desc) {
+        MethodNode result = null;
+        for (MethodNode method : node.methods) {
+            if (desc.equals(method.desc)
+                    && (mcpName.equals(method.name) || srgName.equals(method.name))) {
+                if (result != null) {
+                    throw failure(node.name, "multiple " + mcpName + "/" + srgName + desc);
+                }
+                result = method;
+            }
+        }
+        if (result == null) {
+            throw failure(node.name, "no " + mcpName + "/" + srgName + desc);
+        }
         return result;
     }
 
