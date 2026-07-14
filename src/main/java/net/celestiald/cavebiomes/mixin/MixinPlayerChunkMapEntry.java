@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.celestiald.cavebiomes.api.ExtendedChunkAPI;
 import net.minecraft.network.Packet;
 import net.minecraft.network.play.server.SPacketBlockChange;
 import net.minecraft.network.play.server.SPacketChunkData;
@@ -50,12 +51,12 @@ public abstract class MixinPlayerChunkMapEntry {
 
     @ModifyConstant(method = "sendToPlayers", constant = @Constant(intValue = 65535))
     private int cavebiomes$fullMaskA(int original) {
-        return (1 << WorldHeightAPI.getSectionCount()) - 1;
+        return ExtendedChunkAPI.fullSectionMask();
     }
 
     @ModifyConstant(method = "sendToPlayer", constant = @Constant(intValue = 65535))
     private int cavebiomes$fullMaskB(int original) {
-        return (1 << WorldHeightAPI.getSectionCount()) - 1;
+        return ExtendedChunkAPI.fullSectionMask();
     }
 
     @Overwrite

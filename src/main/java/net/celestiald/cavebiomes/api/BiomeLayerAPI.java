@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.api;
 
 import net.minecraft.world.biome.Biome;
+import net.minecraft.world.World;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -28,6 +29,8 @@ public final class BiomeLayerAPI {
      * server threads. CopyOnWriteArrayList gives lock-free, allocation-free reads.
      */
     private static final List<IVerticalBiomeProvider> PROVIDERS = new CopyOnWriteArrayList<>();
+    private static final List<IWorldVerticalBiomeProvider> WORLD_PROVIDERS =
+            new CopyOnWriteArrayList<>();
 
     /**
      * Hot-path guard. A single volatile read lets {@link #resolve} short-circuit to the
@@ -45,15 +48,31 @@ public final class BiomeLayerAPI {
         hasProviders = true;
     }
 
+    /** Registers a world-aware provider for seed- or dimension-dependent biome layers. */
+    public static void register(IWorldVerticalBiomeProvider provider) {
+        if (provider == null) {
+            throw new IllegalArgumentException("provider must not be null");
+        }
+        WORLD_PROVIDERS.add(provider);
+        hasProviders = true;
+    }
+
     /** Removes a previously registered provider. */
     public static void unregister(IVerticalBiomeProvider provider) {
         PROVIDERS.remove(provider);
-        hasProviders = !PROVIDERS.isEmpty();
+        refreshGuard();
+    }
+
+    /** Removes a previously registered world-aware provider. */
+    public static void unregister(IWorldVerticalBiomeProvider provider) {
+        WORLD_PROVIDERS.remove(provider);
+        refreshGuard();
     }
 
     /** Removes all providers, returning the API to its inert (vanilla) state. */
     public static void clear() {
         PROVIDERS.clear();
+        WORLD_PROVIDERS.clear();
         hasProviders = false;
     }
 
@@ -85,5 +104,30 @@ public final class BiomeLayerAPI {
             }
         }
         return result;
+    }
+
+    /** Resolves both legacy coordinate-only providers and world-aware providers. */
+    public static Biome resolve(World world, int x, int y, int z, Biome base) {
+        if (!hasProviders) {
+            return base;
+        }
+        Biome result = base;
+        for (int i = 0; i < PROVIDERS.size(); i++) {
+            Biome resolved = PROVIDERS.get(i).getBiome(x, y, z, result);
+            if (resolved != null) {
+                result = resolved;
+            }
+        }
+        for (int i = 0; i < WORLD_PROVIDERS.size(); i++) {
+            Biome resolved = WORLD_PROVIDERS.get(i).getBiome(world, x, y, z, result);
+            if (resolved != null) {
+                result = resolved;
+            }
+        }
+        return result;
+    }
+
+    private static void refreshGuard() {
+        hasProviders = !PROVIDERS.isEmpty() || !WORLD_PROVIDERS.isEmpty();
     }
 }

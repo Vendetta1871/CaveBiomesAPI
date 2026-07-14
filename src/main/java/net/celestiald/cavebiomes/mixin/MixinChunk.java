@@ -1,7 +1,11 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.celestiald.cavebiomes.api.IWrappedWorldType;
+import net.celestiald.cavebiomes.world.population.ExtendedChunkPopulationAccess;
+import net.celestiald.cavebiomes.world.population.PopulationRegionScheduler;
 import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.crash.CrashReport;
 import net.minecraft.crash.CrashReportCategory;
@@ -17,9 +21,11 @@ import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldType;
 import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.IChunkProvider;
 import net.minecraft.world.chunk.ChunkPrimer;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 import net.minecraft.world.gen.ChunkGeneratorDebug;
+import net.minecraft.world.gen.IChunkGenerator;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.EntityEvent;
 import org.apache.logging.log4j.LogManager;
@@ -34,11 +40,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import javax.annotation.Nullable;
 
-@Mixin(Chunk.class)
-public abstract class MixinChunk {
+// Apply below the default priority so other mods can inject into the extended
+// implementations merged here, as Moving Elevators does for setBlockState.
+@Mixin(value = Chunk.class, priority = 999)
+public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
 
     // ---- Shadowed fields ----
     @Shadow @Final @Mutable private ExtendedBlockStorage[] storageArrays;
@@ -48,6 +57,7 @@ public abstract class MixinChunk {
     @Shadow private int heightMapMinimum;
     @Shadow private int[] precipitationHeightMap;
     @Shadow private boolean dirty;
+    @Shadow private int queuedLightChecks;
     // NB: must NOT be `public final int x = 0` — javac folds a final field with a
     // constant initializer into the literal 0, so `this.x`/`this.z` would compile
     // to 0 instead of reading the real chunk coords (killed entities, broke
@@ -62,6 +72,7 @@ public abstract class MixinChunk {
     @Shadow protected abstract void propagateSkylightOcclusion(int x, int z);
     @Shadow @Nullable public abstract TileEntity getTileEntity(BlockPos pos, Chunk.EnumCreateEntityType createType);
     @Shadow public abstract int getTopFilledSegment();
+    @Shadow protected abstract void populate(IChunkGenerator generator);
     // getBlockState(BlockPos) delegates to getBlockState(int,int,int) — keep shadow for external calls
     @Shadow public abstract IBlockState getBlockState(BlockPos pos);
 
@@ -72,9 +83,97 @@ public abstract class MixinChunk {
     // Own logger for addEntity warning
     @Unique private static final Logger CAVEBIOMES_CHUNK_LOGGER = LogManager.getLogger("CaveBiomes/Chunk");
 
+    @Override
+    @Unique
+    public void cavebiomes$populate(IChunkGenerator generator) {
+        populate(generator);
+    }
+
     // ---- API helpers ----
     @Unique private int si(int y)    { return (y - WorldHeightAPI.getMinY()) >> 4; }
     @Unique private int yBase(int i) { return i * 16 + WorldHeightAPI.getMinY(); }
+
+    @Unique
+    private static boolean cavebiomes$isBlockYInRange(int blockY) {
+        return blockY >= WorldHeightAPI.getMinY() && blockY < WorldHeightAPI.getMaxY();
+    }
+
+    @Unique
+    private static int cavebiomes$entityStorageIndex(int sectionY, int sectionCount) {
+        int index = sectionY - WorldHeightAPI.getMinSection();
+        if (index < 0) {
+            return 0;
+        }
+        return Math.min(index, sectionCount - 1);
+    }
+
+    @Unique
+    private static int cavebiomes$trackedEntitySectionY(int storageIndex) {
+        return storageIndex + WorldHeightAPI.getMinSection();
+    }
+
+    @Unique
+    private static int cavebiomes$relightQueueLimit(int sectionCount) {
+        return sectionCount * 16 * 16;
+    }
+
+    @Unique
+    private static int cavebiomes$relightSectionIndex(int queueIndex, int sectionCount) {
+        return queueIndex % sectionCount;
+    }
+
+    @Unique
+    private static int cavebiomes$relightLocalX(int queueIndex, int sectionCount) {
+        return queueIndex / sectionCount % 16;
+    }
+
+    @Unique
+    private static int cavebiomes$relightLocalZ(int queueIndex, int sectionCount) {
+        return queueIndex / (sectionCount * 16);
+    }
+
+    @Unique
+    private static int cavebiomes$relightWorldY(int sectionIndex, int localY) {
+        return WorldHeightAPI.sectionYBase(sectionIndex) + localY;
+    }
+
+    @Unique
+    private static boolean cavebiomes$isAboveMinimumBuildHeight(int worldY) {
+        return worldY > WorldHeightAPI.getMinY();
+    }
+
+    @Unique
+    private static boolean cavebiomes$usesExtendedSurfaceRange(int dimension) {
+        return dimension == 0 && WorldHeightAPI.getMinY() < 0;
+    }
+
+    @Unique
+    private static int cavebiomes$precipitationScanStart(int topFilledSegment) {
+        return Math.min(topFilledSegment + 15, WorldHeightAPI.getMaxY() - 1);
+    }
+
+    @Unique
+    private static int cavebiomes$emptyPrecipitationHeight() {
+        return WorldHeightAPI.getMinY() - 1;
+    }
+
+    // =========================================================================
+    // Extended population region: vanilla's two-by-two readiness check is only sufficient for
+    // decorators offset toward +X/+Z. Opt-in generators can require a symmetric loaded square,
+    // preventing feature reads at the loaded edge from recursively generating and populating an
+    // unbounded chain of chunks.
+    // =========================================================================
+
+    @Inject(
+            method = "populate(Lnet/minecraft/world/chunk/IChunkProvider;Lnet/minecraft/world/gen/IChunkGenerator;)V",
+            at = @At("HEAD"), cancellable = true, require = 1, allow = 1)
+    private void cavebiomes$populateLoadedRegion(IChunkProvider provider,
+            IChunkGenerator generator, CallbackInfo ci) {
+        if (PopulationRegionScheduler.populateLoadedRegions(
+                provider, generator, this.x, this.z)) {
+            ci.cancel();
+        }
+    }
 
     // =========================================================================
     // Constructor 1: resize storageArrays and entityLists to configured count
@@ -90,6 +189,10 @@ public abstract class MixinChunk {
                 this.entityLists[i] = new ClassInheritanceMultiMap<>(Entity.class);
             }
         }
+        // Vanilla initializes this to 4096 (= 16 sections * 16 X * 16 Z), meaning
+        // the incremental relight sweep is complete until resetRelightChecks() runs.
+        // Preserve that state for the configured number of sections.
+        this.queuedLightChecks = cavebiomes$relightQueueLimit(count);
     }
 
     // =========================================================================
@@ -125,7 +228,11 @@ public abstract class MixinChunk {
 
     @Overwrite
     public IBlockState getBlockState(final int x, final int y, final int z) {
-        if (this.world.getWorldType() == WorldType.DEBUG_ALL_BLOCK_STATES) {
+        WorldType worldType = this.world.getWorldType();
+        if (worldType instanceof IWrappedWorldType) {
+            worldType = ((IWrappedWorldType) worldType).getBaseWorldType();
+        }
+        if (worldType == WorldType.DEBUG_ALL_BLOCK_STATES) {
             IBlockState iblockstate = null;
             if (y == 60) iblockstate = Blocks.BARRIER.getDefaultState();
             if (y == 70) iblockstate = ChunkGeneratorDebug.getBlockStateFor(x, z);
@@ -152,6 +259,47 @@ public abstract class MixinChunk {
     }
 
     // =========================================================================
+    // Precipitation surface: vanilla stops its lazy column scan above Y=0.
+    // Keep that implementation untouched outside the extended Overworld, while
+    // shifting both its lower bound and empty-column sentinel with minY.
+    // =========================================================================
+
+    @Inject(method = "getPrecipitationHeight", at = @At("HEAD"), cancellable = true,
+            require = 1, allow = 1)
+    private void cavebiomes$getPrecipitationHeight(BlockPos pos,
+            CallbackInfoReturnable<BlockPos> cir) {
+        if (!cavebiomes$usesExtendedSurfaceRange(this.world.provider.getDimension())) {
+            return;
+        }
+
+        int localX = pos.getX() & 15;
+        int localZ = pos.getZ() & 15;
+        int column = localX | localZ << 4;
+        int height = this.precipitationHeightMap[column];
+
+        if (height == -999) {
+            int minY = WorldHeightAPI.getMinY();
+            BlockPos cursor = new BlockPos(pos.getX(),
+                    cavebiomes$precipitationScanStart(this.getTopFilledSegment()), pos.getZ());
+            height = cavebiomes$emptyPrecipitationHeight();
+
+            while (cursor.getY() > minY) {
+                IBlockState state = this.getBlockState(cursor);
+                Material material = state.getMaterial();
+                if (material.blocksMovement() || material.isLiquid()) {
+                    height = cursor.getY() + 1;
+                    break;
+                }
+                cursor = cursor.down();
+            }
+
+            this.precipitationHeightMap[column] = height;
+        }
+
+        cir.setReturnValue(new BlockPos(pos.getX(), height, pos.getZ()));
+    }
+
+    // =========================================================================
     // setBlockState: fix j >> 4 index and yBase for new ExtendedBlockStorage
     // =========================================================================
 
@@ -161,6 +309,9 @@ public abstract class MixinChunk {
         int i  = pos.getX() & 15;
         int j  = pos.getY();
         int k  = pos.getZ() & 15;
+        if (!cavebiomes$isBlockYInRange(j)) {
+            return null;
+        }
         int l  = k << 4 | i;
 
         if (j >= this.precipitationHeightMap[l] - 1) {
@@ -427,6 +578,106 @@ public abstract class MixinChunk {
     // in MixinChunkClient so this common Mixin still applies on a dedicated server.
 
     // =========================================================================
+    // Incremental relight sweep: vanilla encodes 16 sections in a 4096-entry
+    // queue and anchors their world positions at Y=0. Decode against the actual
+    // storage-array length and minY so every configured section is visited once.
+    // =========================================================================
+
+    /**
+     * @author CelestialD
+     * @reason Decode incremental relight work against the configured finite section range.
+     */
+    @Overwrite
+    public void enqueueRelightChecks() {
+        int sectionCount = this.storageArrays.length;
+        int queueLimit = cavebiomes$relightQueueLimit(sectionCount);
+        if (this.queuedLightChecks >= queueLimit) {
+            return;
+        }
+
+        for (int iteration = 0; iteration < 8; ++iteration) {
+            if (this.queuedLightChecks >= queueLimit) {
+                return;
+            }
+
+            int queueIndex = this.queuedLightChecks++;
+            int sectionIndex = cavebiomes$relightSectionIndex(queueIndex, sectionCount);
+            int localX = cavebiomes$relightLocalX(queueIndex, sectionCount);
+            int localZ = cavebiomes$relightLocalZ(queueIndex, sectionCount);
+            ExtendedBlockStorage section = this.storageArrays[sectionIndex];
+
+            for (int localY = 0; localY < 16; ++localY) {
+                int worldY = cavebiomes$relightWorldY(sectionIndex, localY);
+                BlockPos pos = new BlockPos((this.x << 4) + localX, worldY,
+                        (this.z << 4) + localZ);
+                boolean boundary = localY == 0 || localY == 15
+                        || localX == 0 || localX == 15 || localZ == 0 || localZ == 15;
+                IBlockState state = section == Chunk.NULL_BLOCK_STORAGE
+                        ? Blocks.AIR.getDefaultState() : section.get(localX, localY, localZ);
+
+                if ((section == Chunk.NULL_BLOCK_STORAGE && boundary)
+                        || (section != Chunk.NULL_BLOCK_STORAGE
+                        && state.getBlock().isAir(state, this.world, pos))) {
+                    for (EnumFacing facing : EnumFacing.values()) {
+                        BlockPos neighbor = pos.offset(facing);
+                        IBlockState neighborState = this.world.getBlockState(neighbor);
+                        if (neighborState.getLightValue(this.world, neighbor) > 0) {
+                            this.world.checkLight(neighbor);
+                        }
+                    }
+                    this.world.checkLight(pos);
+                }
+            }
+        }
+    }
+
+    /**
+     * Checks one horizontal column while populating chunk light. Vanilla stops
+     * both downward passes at Y=0; the finite world must stop at minY instead.
+     *
+     * @author CelestialD
+     * @reason Populate skylight and emitted light through the configured minimum Y.
+     */
+    @Overwrite
+    private boolean checkLight(int localX, int localZ) {
+        int topSegment = this.getTopFilledSegment();
+        boolean foundOpaque = false;
+        boolean reachedOpaqueBelowSea = false;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(
+                (this.x << 4) + localX, WorldHeightAPI.getMinY(),
+                (this.z << 4) + localZ);
+
+        for (int worldY = topSegment + 16 - 1;
+                worldY > this.world.getSeaLevel()
+                        || (cavebiomes$isAboveMinimumBuildHeight(worldY)
+                        && !reachedOpaqueBelowSea);
+                --worldY) {
+            pos.setPos(pos.getX(), worldY, pos.getZ());
+            int opacity = this.getBlockLightOpacity(localX, worldY, localZ);
+            if (opacity == 255 && worldY < this.world.getSeaLevel()) {
+                reachedOpaqueBelowSea = true;
+            }
+
+            if (!foundOpaque && opacity > 0) {
+                foundOpaque = true;
+            } else if (foundOpaque && opacity == 0 && !this.world.checkLight(pos)) {
+                return false;
+            }
+        }
+
+        for (int worldY = pos.getY(); cavebiomes$isAboveMinimumBuildHeight(worldY);
+                --worldY) {
+            pos.setPos(pos.getX(), worldY, pos.getZ());
+            IBlockState state = this.getBlockState(pos);
+            if (state.getLightValue(this.world, pos) > 0) {
+                this.world.checkLight(pos);
+            }
+        }
+
+        return true;
+    }
+
+    // =========================================================================
     // isEmptyBetween (func_76606_c): vanilla clamps to [0,256) and indexes
     // storageArrays[y>>4]; switch to [minY,maxY) and si(y).
     // =========================================================================
@@ -448,8 +699,10 @@ public abstract class MixinChunk {
     }
 
     // =========================================================================
-    // addEntity: shift entity section index by -minSection so entities at Y<0
-    // land in the correct entityLists bucket
+    // Entity.chunkCoordY remains the raw signed section coordinate used by
+    // World.updateEntityWithOptionalForce. Only accesses to entityLists use the normalized index.
+    // Keeping those two coordinate systems distinct prevents every entity from being removed and
+    // re-added on every tick when minSection is non-zero.
     // =========================================================================
 
     @Overwrite
@@ -464,17 +717,30 @@ public abstract class MixinChunk {
             entityIn.setDead();
         }
 
-        int k = MathHelper.floor(entityIn.posY / 16.0D) - WorldHeightAPI.getMinSection();
-        if (k < 0) k = 0;
-        if (k >= this.entityLists.length) k = this.entityLists.length - 1;
+        int sectionY = MathHelper.floor(entityIn.posY / 16.0D);
+        int sectionIndex = cavebiomes$entityStorageIndex(sectionY, this.entityLists.length);
 
         MinecraftForge.EVENT_BUS.post(new EntityEvent.EnteringChunk(
                 entityIn, this.x, this.z, entityIn.chunkCoordX, entityIn.chunkCoordZ));
         entityIn.addedToChunk = true;
         entityIn.chunkCoordX = this.x;
-        entityIn.chunkCoordY = k;
+        entityIn.chunkCoordY = cavebiomes$trackedEntitySectionY(sectionIndex);
         entityIn.chunkCoordZ = this.z;
-        this.entityLists[k].add(entityIn);
+        this.entityLists[sectionIndex].add(entityIn);
+        this.markDirty();
+    }
+
+    /**
+     * Converts Entity.chunkCoordY's signed section coordinate back to an array index.
+     *
+     * @author CelestialD
+     * @reason Extended entity arrays are offset by minSection while the Entity field must retain
+     *         the raw section coordinate compared by World.updateEntityWithOptionalForce.
+     */
+    @Overwrite
+    public void removeEntityAtIndex(Entity entityIn, int sectionY) {
+        int sectionIndex = cavebiomes$entityStorageIndex(sectionY, this.entityLists.length);
+        this.entityLists[sectionIndex].remove(entityIn);
         this.markDirty();
     }
 

@@ -2,11 +2,17 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.block.BlockLiquid;
+import net.minecraft.block.material.Material;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.init.Blocks;
 import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.World;
+import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.Chunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -27,22 +33,19 @@ public abstract class MixinWorld {
     @Shadow public abstract boolean isBlockLoaded(BlockPos pos);
     @Shadow public abstract Chunk getChunkFromBlockCoords(BlockPos pos);
     @Shadow public abstract void notifyLightSet(BlockPos pos);
+    @Shadow protected abstract boolean isChunkLoaded(int x, int z, boolean allowEmpty);
+    @Shadow public abstract Biome getBiome(BlockPos pos);
+    @Shadow public abstract IBlockState getBlockState(BlockPos pos);
+    @Shadow public abstract int getLightFor(EnumSkyBlock type, BlockPos pos);
 
-    // =========================================================================
-    // World height: vanilla World.getHeight()/getActualHeight() hardcode 256.
-    // (They live in World, NOT WorldProvider — targeting WorldProvider was the
-    // original startup-crash bug.)
-    // =========================================================================
-
-    @ModifyConstant(method = "getHeight()I", constant = @Constant(intValue = 256))
-    private int fixGetHeight(int original) {
-        return WorldHeightAPI.getMaxY();
+    @Unique
+    private static boolean cavebiomes$usesExtendedSurfaceRange(int dimension) {
+        return dimension == 0 && WorldHeightAPI.getMinY() < 0;
     }
 
-    // getActualHeight: nether keeps 128, everything else uses configured maxY.
-    @ModifyConstant(method = "getActualHeight", constant = @Constant(intValue = 256))
-    private int fixGetActualHeight(int original) {
-        return WorldHeightAPI.getMaxY();
+    @Unique
+    private static int cavebiomes$topSurfaceScanStart(int topFilledSegment) {
+        return Math.min(topFilledSegment + 16, WorldHeightAPI.getMaxY());
     }
 
     // =========================================================================
@@ -54,19 +57,29 @@ public abstract class MixinWorld {
         cir.setReturnValue(pos.getY() < WorldHeightAPI.getMinY() || pos.getY() >= WorldHeightAPI.getMaxY());
     }
 
-    // isAreaLoaded(int,int,int,int,int,int,boolean): vanilla checks `toY >= 0 && fromY < 256`.
-    // Extend both sides: 256 -> maxY, and `>= 0` -> `>= minY`. Without the lower fix,
-    // checkLightFor at Y < -17 calls isAreaLoaded(pos, 17) whose toY = pos.Y+17 < 0,
-    // so isAreaLoaded returns false immediately and the BFS never runs -> no light propagation.
-    @ModifyConstant(method = "isAreaLoaded(IIIIIIZ)Z", constant = @Constant(intValue = 256))
-    private int fixAreaLoadedMaxY(int original) {
-        return WorldHeightAPI.getMaxY();
-    }
-
-    @ModifyConstant(method = "isAreaLoaded(IIIIIIZ)Z",
-            constant = @Constant(intValue = 0, expandZeroConditions = Constant.Condition.GREATER_THAN_OR_EQUAL_TO_ZERO))
-    private int fixAreaLoadedMinY(int original) {
-        return WorldHeightAPI.getMinY();
+    // Reimplement the small private bound/loaded-chunk loop. Using expandZeroConditions here also
+    // rewrites vanilla's boolean false return constants and can turn an unloaded area into true.
+    @Inject(method = "isAreaLoaded(IIIIIIZ)Z", at = @At("HEAD"), cancellable = true)
+    private void cavebiomes$isAreaLoaded(int fromX, int fromY, int fromZ,
+            int toX, int toY, int toZ, boolean allowEmpty,
+            CallbackInfoReturnable<Boolean> cir) {
+        if (toY < WorldHeightAPI.getMinY() || fromY >= WorldHeightAPI.getMaxY()) {
+            cir.setReturnValue(false);
+            return;
+        }
+        int minimumChunkX = fromX >> 4;
+        int maximumChunkX = toX >> 4;
+        int minimumChunkZ = fromZ >> 4;
+        int maximumChunkZ = toZ >> 4;
+        for (int chunkX = minimumChunkX; chunkX <= maximumChunkX; ++chunkX) {
+            for (int chunkZ = minimumChunkZ; chunkZ <= maximumChunkZ; ++chunkZ) {
+                if (!this.isChunkLoaded(chunkX, chunkZ, allowEmpty)) {
+                    cir.setReturnValue(false);
+                    return;
+                }
+            }
+        }
+        cir.setReturnValue(true);
     }
 
     // =========================================================================
@@ -145,17 +158,100 @@ public abstract class MixinWorld {
     }
 
     // =========================================================================
+    // Top-surface query. Vanilla walks down to Y=-1 from the highest populated
+    // section. Extend only the Overworld walk to minY-1 and cap its starting
+    // point at the configured exclusive upper bound.
+    // =========================================================================
+
+    @Inject(method = "getTopSolidOrLiquidBlock", at = @At("HEAD"), cancellable = true,
+            require = 1, allow = 1)
+    private void cavebiomes$getTopSolidOrLiquidBlock(BlockPos pos,
+            CallbackInfoReturnable<BlockPos> cir) {
+        World world = (World) (Object) this;
+        if (!cavebiomes$usesExtendedSurfaceRange(world.provider.getDimension())) {
+            return;
+        }
+
+        Chunk chunk = this.getChunkFromBlockCoords(pos);
+        BlockPos cursor = new BlockPos(pos.getX(),
+                cavebiomes$topSurfaceScanStart(chunk.getTopFilledSegment()), pos.getZ());
+        int minY = WorldHeightAPI.getMinY();
+
+        while (cursor.getY() >= minY) {
+            BlockPos below = cursor.down();
+            IBlockState state = chunk.getBlockState(below);
+            if (state.getMaterial().blocksMovement()
+                    && !state.getBlock().isLeaves(state, world, below)
+                    && !state.getBlock().isFoliage(world, below)) {
+                break;
+            }
+            cursor = below;
+        }
+
+        cir.setReturnValue(cursor);
+    }
+
+    // =========================================================================
     // Snow / ice formation Y range (vanilla hardcodes 256)
     // =========================================================================
 
-    @ModifyConstant(method = "canSnowAt", constant = @Constant(intValue = 256))
-    private int fixSnowMaxY(int original) {
-        return WorldHeightAPI.getMaxY();
+    @Inject(method = "canSnowAtBody", at = @At("HEAD"), cancellable = true, remap = false)
+    private void cavebiomes$canSnowAtBody(BlockPos pos, boolean checkLight,
+            CallbackInfoReturnable<Boolean> cir) {
+        int y = pos.getY();
+        if (y >= 0 && y < 256) {
+            return;
+        }
+        if (y < WorldHeightAPI.getMinY() || y >= WorldHeightAPI.getMaxY()) {
+            cir.setReturnValue(false);
+            return;
+        }
+        Biome biome = this.getBiome(pos);
+        if (biome.getTemperature(pos) >= 0.15F) {
+            cir.setReturnValue(false);
+            return;
+        }
+        if (!checkLight) {
+            cir.setReturnValue(true);
+            return;
+        }
+        IBlockState state = this.getBlockState(pos);
+        World world = (World) (Object) this;
+        cir.setReturnValue(this.getLightFor(EnumSkyBlock.BLOCK, pos) < 10
+                && state.getBlock().isAir(state, world, pos)
+                && Blocks.SNOW_LAYER.canPlaceBlockAt(world, pos));
     }
 
-    @ModifyConstant(method = "canBlockFreeze(Lnet/minecraft/util/math/BlockPos;Z)Z",
-            constant = @Constant(intValue = 256))
-    private int fixFreezeMaxY(int original) {
-        return WorldHeightAPI.getMaxY();
+    @Inject(method = "canBlockFreezeBody", at = @At("HEAD"), cancellable = true,
+            remap = false)
+    private void cavebiomes$canBlockFreezeBody(BlockPos pos, boolean noWaterAdjacent,
+            CallbackInfoReturnable<Boolean> cir) {
+        int y = pos.getY();
+        if (y >= 0 && y < 256) {
+            return;
+        }
+        if (y < WorldHeightAPI.getMinY() || y >= WorldHeightAPI.getMaxY()
+                || this.getBiome(pos).getTemperature(pos) >= 0.15F
+                || this.getLightFor(EnumSkyBlock.BLOCK, pos) >= 10) {
+            cir.setReturnValue(false);
+            return;
+        }
+        IBlockState state = this.getBlockState(pos);
+        if ((state.getBlock() != Blocks.WATER && state.getBlock() != Blocks.FLOWING_WATER)
+                || state.getValue(BlockLiquid.LEVEL) != 0) {
+            cir.setReturnValue(false);
+            return;
+        }
+        if (!noWaterAdjacent) {
+            cir.setReturnValue(true);
+            return;
+        }
+        boolean surrounded = isWater(pos.west()) && isWater(pos.east())
+                && isWater(pos.north()) && isWater(pos.south());
+        cir.setReturnValue(!surrounded);
+    }
+
+    private boolean isWater(BlockPos pos) {
+        return this.getBlockState(pos).getMaterial() == Material.WATER;
     }
 }

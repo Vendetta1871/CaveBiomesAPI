@@ -8,7 +8,10 @@ import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 import net.minecraft.world.gen.ChunkGeneratorOverworld;
+import net.minecraft.world.World;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -21,10 +24,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * within each registered vertical biome's Y-band. Solid rock between caves stays stone, just
  * like real deserts are stone underground.
  *
- * <p>Runs at {@code generateChunk} RETURN on the finished {@link Chunk}, mirroring the Stage-1
- * {@code MixinChunkGeneratorOverworld.cavebiomes$fillBelowZero} pattern (direct
- * {@link ExtendedBlockStorage} writes, no lighting churn since stone↔surface-block are both
- * opaque full cubes).</p>
+ * <p>Runs at {@code generateChunk} RETURN on the finished {@link Chunk}, using direct
+ * {@link ExtendedBlockStorage} writes with no lighting churn since stone and surface blocks are
+ * opaque full cubes.</p>
  *
  * <p>Inert by default: if no providers are registered the inject returns immediately, leaving
  * generation byte-for-byte vanilla.</p>
@@ -38,6 +40,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(ChunkGeneratorOverworld.class)
 public abstract class MixinChunkGeneratorBiome {
+
+    @Shadow @Final private World world;
 
     @Inject(method = "generateChunk", at = @At("RETURN"))
     private void cavebiomes$decorateCaveBiomes(int cx, int cz, CallbackInfoReturnable<Chunk> cir) {
@@ -116,7 +120,8 @@ public abstract class MixinChunkGeneratorBiome {
         if (base == null) {
             return false;
         }
-        Biome resolved = BiomeLayerAPI.resolve(baseX + nx, ny, baseZ + nz, base);
+        Biome resolved = BiomeLayerAPI.resolve(this.world,
+                baseX + nx, ny, baseZ + nz, base);
         if (resolved == base) {
             return false;
         }

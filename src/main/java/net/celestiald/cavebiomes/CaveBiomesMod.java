@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes;
 
 import net.celestiald.cavebiomes.config.WorldHeightConfig;
+import net.celestiald.cavebiomes.network.WorldHeightNetwork;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
@@ -12,7 +13,7 @@ public class CaveBiomesMod {
 
     public static final String MODID   = "cavebiomesapi";
     public static final String NAME    = "Cave Biomes API";
-    public static final String VERSION = "1.0.0";
+    public static final String VERSION = "1.1.0";
 
     @Mod.Instance
     public static CaveBiomesMod INSTANCE;
@@ -23,6 +24,7 @@ public class CaveBiomesMod {
     public void preInit(FMLPreInitializationEvent event) {
         logger = event.getModLog();
         WorldHeightConfig.init(event.getModConfigurationDirectory());
+        WorldHeightNetwork.initialize();
         logger.info("World height: Y {} to {}", WorldHeightConfig.minY, WorldHeightConfig.maxY);
     }
 

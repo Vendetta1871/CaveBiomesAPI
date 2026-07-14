@@ -5,7 +5,10 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.BiomeProvider;
 import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.World;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -30,6 +33,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Chunk.class)
 public abstract class MixinChunkBiome {
 
+    @Shadow @Final private World world;
+
     @Inject(
             method = "getBiome(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/world/biome/BiomeProvider;)Lnet/minecraft/world/biome/Biome;",
             at = @At("RETURN"),
@@ -37,7 +42,8 @@ public abstract class MixinChunkBiome {
     private void cavebiomes$applyVerticalBiome(BlockPos pos, BiomeProvider provider,
                                                CallbackInfoReturnable<Biome> cir) {
         Biome base = cir.getReturnValue();
-        Biome resolved = BiomeLayerAPI.resolve(pos.getX(), pos.getY(), pos.getZ(), base);
+        Biome resolved = BiomeLayerAPI.resolve(this.world,
+                pos.getX(), pos.getY(), pos.getZ(), base);
         if (resolved != base) {
             cir.setReturnValue(resolved);
         }
