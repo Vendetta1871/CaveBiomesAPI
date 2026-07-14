@@ -46,6 +46,11 @@ public final class WorldHeightAPI {
         return (worldY - getMinY()) >> 4;
     }
 
+    /** Converts an absolute section Y coordinate to a storageArrays index. */
+    public static int sectionIndexFromSectionY(int sectionY) {
+        return sectionY - getMinSection();
+    }
+
     /** Returns the Y base (bottom of section) for a given storageArrays index. */
     public static int sectionYBase(int sectionIdx) {
         return sectionIdx * 16 + getMinY();
