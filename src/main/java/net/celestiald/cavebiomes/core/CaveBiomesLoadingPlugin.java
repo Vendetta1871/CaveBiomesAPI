@@ -7,9 +7,12 @@ import java.util.Map;
 
 @IFMLLoadingPlugin.MCVersion("1.12.2")
 @IFMLLoadingPlugin.SortingIndex(1001)
+@IFMLLoadingPlugin.TransformerExclusions({"net.celestiald.cavebiomes.core"})
 public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
 
-    @Override public String[] getASMTransformerClass() { return null; }
+    @Override public String[] getASMTransformerClass() {
+        return new String[]{NetworkQueueRaceTransformer.class.getName()};
+    }
     @Override public String getModContainerClass() { return null; }
     @Override public String getSetupClass() { return null; }
     @Override public void injectData(Map<String, Object> data) {
