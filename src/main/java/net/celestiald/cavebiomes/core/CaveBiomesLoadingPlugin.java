@@ -11,7 +11,10 @@ import java.util.Map;
 public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
 
     @Override public String[] getASMTransformerClass() {
-        return new String[]{NetworkQueueRaceTransformer.class.getName()};
+        return new String[]{
+                NetworkQueueRaceTransformer.class.getName(),
+                ClientBlockChangeGuardTransformer.class.getName()
+        };
     }
     @Override public String getModContainerClass() { return null; }
     @Override public String getSetupClass() { return null; }
