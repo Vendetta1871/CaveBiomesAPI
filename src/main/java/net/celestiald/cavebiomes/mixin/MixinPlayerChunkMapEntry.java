@@ -2,6 +2,7 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.celestiald.cavebiomes.api.ExtendedChunkAPI;
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.network.Packet;
 import net.minecraft.network.play.server.SPacketBlockChange;
 import net.minecraft.network.play.server.SPacketChunkData;
@@ -111,6 +112,17 @@ public abstract class MixinPlayerChunkMapEntry {
                         changedBlocks[i] = (short) (x << 12 | z << 8 | y);
                     }
                     this.sendPacket(new SPacketMultiBlockChange(this.changes, changedBlocks, this.chunk));
+                    for (int i = 0; i < this.changes; ++i) {
+                        int packed = this.cavebiomes$changed[i];
+                        int x = ((packed >>> 28) & 15) + this.pos.x * 16;
+                        int y = (packed & 0xFFFFFF) + WorldHeightAPI.getMinY();
+                        int z = ((packed >>> 24) & 15) + this.pos.z * 16;
+                        BlockPos blockpos = new BlockPos(x, y, z);
+                        IBlockState state = world.getBlockState(blockpos);
+                        if (state.getBlock().hasTileEntity(state)) {
+                            this.sendBlockEntity(world.getTileEntity(blockpos));
+                        }
+                    }
                 } else {
                     // Extended-height updates and saturated batches cannot use the vanilla
                     // packet's eight-bit Y field, so resend only their affected sections.
