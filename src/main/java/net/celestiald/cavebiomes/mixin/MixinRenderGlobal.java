@@ -11,34 +11,19 @@ import net.minecraft.util.math.MathHelper;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 import javax.annotation.Nullable;
 
 /**
- * renderEntities() picks a chunk's per-section entity list with
- * {@code chunk.getEntityLists()[renderChunk.getPosition().getY() / 16]}.
- * With a negative grid origin (minY < 0) that render-chunk Y is negative, so the
- * index becomes negative -> ArrayIndexOutOfBoundsException. getY() is called
- * exactly once in renderEntities (for this index), so redirect it to the
- * minY-shifted value, mapping the row into [0, sectionCount). Clamp the result
- * because OptiFine and entity-render hooks can retain a render chunk for one
- * frame while the view frustum is being rebuilt or torn down.
+ * Extends vanilla's render-chunk traversal beyond Y 0..255. Kept separate from
+ * the entity-list index fix because OptiFine removes this private helper; an
+ * optional traversal overwrite must not disable required entity rendering.
  */
 @Mixin(RenderGlobal.class)
 public abstract class MixinRenderGlobal {
 
     @Shadow private ViewFrustum viewFrustum;
     @Shadow private int renderDistanceChunks;
-
-    @Redirect(method = "renderEntities",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/util/math/BlockPos;getY()I"))
-    private int cavebiomes$entityListRowY(BlockPos pos) {
-        int shiftedY = pos.getY() - WorldHeightAPI.getMinY();
-        int highestShiftedY = WorldHeightAPI.getMaxY() - WorldHeightAPI.getMinY() - 1;
-        return MathHelper.clamp(shiftedY, 0, highestShiftedY);
-    }
 
     // =========================================================================
     // setupTerrain() walks the render-chunk visibility graph via this private
