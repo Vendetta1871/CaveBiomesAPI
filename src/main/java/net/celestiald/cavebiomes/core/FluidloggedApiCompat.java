@@ -95,6 +95,7 @@ public final class FluidloggedApiCompat {
     public static void deserializeCapability(Object owner, NBTBase serialized) {
         if (!(serialized instanceof NBTTagCompound)
                 || !((NBTTagCompound) serialized).hasKey(PAGE_LIST, 9)) {
+            clear(owner);
             deserializePage(owner, serialized);
             return;
         }
@@ -119,10 +120,10 @@ public final class FluidloggedApiCompat {
 
         int minimumPage = Math.floorDiv(WorldHeightAPI.getMinY(), 256);
         int maximumPage = Math.floorDiv(WorldHeightAPI.getMaxY() - 1, 256);
-        for (int page = minimumPage; page <= maximumPage; page++) {
-            if (page == 0) continue;
-            Object container = getContainer(capability, page * 256);
-            if (isEmpty(container)) continue;
+        for (Map.Entry<Integer, Object> entry : pageSnapshot(capability).entrySet()) {
+            int page = entry.getKey();
+            if (page < minimumPage || page > maximumPage
+                    || isEmpty(entry.getValue())) continue;
             sendPage(chunk, event, capability, page * 256);
         }
     }
