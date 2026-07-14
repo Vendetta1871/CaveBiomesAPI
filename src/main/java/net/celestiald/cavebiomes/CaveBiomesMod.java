@@ -1,5 +1,6 @@
 package net.celestiald.cavebiomes;
 
+import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.celestiald.cavebiomes.config.WorldHeightConfig;
 import net.celestiald.cavebiomes.network.WorldHeightNetwork;
 import net.minecraftforge.fml.common.Mod;
@@ -28,6 +29,7 @@ public class CaveBiomesMod {
     public void preInit(FMLPreInitializationEvent event) {
         logger = event.getModLog();
         WorldHeightConfig.init(event.getModConfigurationDirectory());
+        WorldHeightAPI.freezeRange();
         WorldHeightNetwork.initialize();
         logger.info("World height: Y {} to {}", WorldHeightConfig.minY, WorldHeightConfig.maxY);
     }

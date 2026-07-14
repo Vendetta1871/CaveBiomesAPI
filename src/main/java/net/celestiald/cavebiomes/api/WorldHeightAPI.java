@@ -10,6 +10,7 @@ public final class WorldHeightAPI {
 
     private static volatile Range activeRange = new Range(-64, 320);
     private static volatile Range configuredRange = activeRange;
+    private static volatile boolean rangeFrozen;
 
     private WorldHeightAPI() {}
 
@@ -64,6 +65,7 @@ public final class WorldHeightAPI {
     public static synchronized void configureLocalRange(int minY, int maxY) {
         validateRange(minY, maxY);
         Range range = new Range(minY, maxY);
+        requireMutableOrSame(range, "configure the local world height");
         configuredRange = range;
         activeRange = range;
     }
@@ -71,12 +73,29 @@ public final class WorldHeightAPI {
     /** Applies the authoritative range received from a multiplayer server. */
     public static synchronized void applyServerRange(int minY, int maxY) {
         validateRange(minY, maxY);
-        activeRange = new Range(minY, maxY);
+        Range range = new Range(minY, maxY);
+        requireMutableOrSame(range, "apply a server world height");
+        activeRange = range;
     }
 
     /** Restores the client-side local range after leaving a server. */
     public static synchronized void resetToConfiguredRange() {
+        requireMutableOrSame(configuredRange, "reset the local world height");
         activeRange = configuredRange;
+    }
+
+    /** Locks the configured range before any world-dependent arrays can be allocated. */
+    public static synchronized void freezeRange() {
+        rangeFrozen = true;
+    }
+
+    private static void requireMutableOrSame(Range requested, String action) {
+        Range active = activeRange;
+        if (rangeFrozen && (active.minimumY != requested.minimumY
+                || active.maximumY != requested.maximumY)) {
+            throw new IllegalStateException("Cannot " + action + " after Cave Biomes API startup; "
+                    + "the active range is " + active.minimumY + ".." + active.maximumY);
+        }
     }
 
     private static void validateRange(int minY, int maxY) {
