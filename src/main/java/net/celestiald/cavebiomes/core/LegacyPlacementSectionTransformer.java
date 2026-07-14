@@ -95,8 +95,10 @@ public final class LegacyPlacementSectionTransformer implements IClassTransforme
     private static void patchDimensionalDoors(ClassNode node) {
         MethodNode method = uniqueMethod(node, DIMENSIONAL_DOORS_METHOD,
                 DIMENSIONAL_DOORS_DESC);
+        int arrayLocal = dimensionalDoorsStorageArrayLocal(method);
         AbstractInsnNode readShift = null;
         AbstractInsnNode writeShift = null;
+        int sectionOffsetLocal = -1;
         for (AbstractInsnNode instruction : method.instructions.toArray()) {
             if (instruction.getOpcode() != Opcodes.ISHR) continue;
             AbstractInsnNode shiftAmount = previousReal(instruction);
@@ -110,13 +112,19 @@ public final class LegacyPlacementSectionTransformer implements IClassTransforme
                     || ((VarInsnNode) originYLoad).var != 3
                     || !(arrayLoad instanceof VarInsnNode)
                     || arrayLoad.getOpcode() != Opcodes.ALOAD
-                    || ((VarInsnNode) arrayLoad).var != 14
+                    || ((VarInsnNode) arrayLoad).var != arrayLocal
                     || !(sliceLoad instanceof VarInsnNode)
                     || sliceLoad.getOpcode() != Opcodes.ILOAD
-                    || ((VarInsnNode) sliceLoad).var != 15
                     || addition.getOpcode() != Opcodes.IADD) {
                 continue;
             }
+
+            int candidateOffsetLocal = ((VarInsnNode) sliceLoad).var;
+            if (sectionOffsetLocal >= 0 && sectionOffsetLocal != candidateOffsetLocal) {
+                throw failure(DIMENSIONAL_DOORS,
+                        "inconsistent chunk-section offset locals");
+            }
+            sectionOffsetLocal = candidateOffsetLocal;
 
             AbstractInsnNode afterAddition = nextReal(addition);
             if (afterAddition.getOpcode() == Opcodes.AALOAD) {
@@ -126,7 +134,6 @@ public final class LegacyPlacementSectionTransformer implements IClassTransforme
                 readShift = instruction;
             } else if (afterAddition instanceof VarInsnNode
                     && afterAddition.getOpcode() == Opcodes.ALOAD
-                    && ((VarInsnNode) afterAddition).var == 16
                     && nextReal(afterAddition).getOpcode() == Opcodes.AASTORE) {
                 if (writeShift != null) {
                     throw failure(DIMENSIONAL_DOORS, "multiple chunk-section writes");
@@ -137,8 +144,60 @@ public final class LegacyPlacementSectionTransformer implements IClassTransforme
         if (readShift == null || writeShift == null) {
             throw failure(DIMENSIONAL_DOORS, "expected one chunk-section read and write");
         }
+        validateDimensionalDoorsConstructorBase(method, sectionOffsetLocal);
         replaceSectionShift(method, readShift, "sectionIndex");
         replaceSectionShift(method, writeShift, "sectionIndex");
+    }
+
+    private static int dimensionalDoorsStorageArrayLocal(MethodNode method) {
+        VarInsnNode result = null;
+        int getters = 0;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (!(instruction instanceof MethodInsnNode)
+                    || !isStorageGetter((MethodInsnNode) instruction)) continue;
+            getters++;
+            AbstractInsnNode store = nextReal(instruction);
+            if (!(store instanceof VarInsnNode) || store.getOpcode() != Opcodes.ASTORE) {
+                throw failure(DIMENSIONAL_DOORS, "unexpected chunk storage-array store");
+            }
+            if (result != null) {
+                throw failure(DIMENSIONAL_DOORS, "multiple chunk storage arrays");
+            }
+            result = (VarInsnNode) store;
+        }
+        if (getters != 1 || result == null) {
+            throw failure(DIMENSIONAL_DOORS, "expected one chunk storage array");
+        }
+        return result.var;
+    }
+
+    private static void validateDimensionalDoorsConstructorBase(MethodNode method,
+            int sectionOffsetLocal) {
+        int bases = 0;
+        for (AbstractInsnNode instruction : method.instructions.toArray()) {
+            if (instruction.getOpcode() != Opcodes.ISHR
+                    || previousReal(instruction).getOpcode() != Opcodes.ICONST_4) continue;
+            AbstractInsnNode yLoad = previousReal(previousReal(instruction));
+            AbstractInsnNode offsetLoad = nextReal(instruction);
+            AbstractInsnNode addition = nextReal(offsetLoad);
+            AbstractInsnNode shiftAmount = nextReal(addition);
+            AbstractInsnNode shift = nextReal(shiftAmount);
+            if (yLoad instanceof VarInsnNode
+                    && yLoad.getOpcode() == Opcodes.ILOAD
+                    && ((VarInsnNode) yLoad).var == 3
+                    && offsetLoad instanceof VarInsnNode
+                    && offsetLoad.getOpcode() == Opcodes.ILOAD
+                    && ((VarInsnNode) offsetLoad).var == sectionOffsetLocal
+                    && addition.getOpcode() == Opcodes.IADD
+                    && shiftAmount.getOpcode() == Opcodes.ICONST_4
+                    && shift.getOpcode() == Opcodes.ISHL) {
+                bases++;
+            }
+        }
+        if (bases != 1) {
+            throw failure(DIMENSIONAL_DOORS,
+                    "expected one preserved absolute section constructor base");
+        }
     }
 
     private static void patchLuckyBlock(ClassNode node) {
