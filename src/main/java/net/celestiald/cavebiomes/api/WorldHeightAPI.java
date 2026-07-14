@@ -54,6 +54,12 @@ public final class WorldHeightAPI {
         return sectionIdx * 16 + activeRange.minimumY;
     }
 
+    /** Returns whether both bounds match one atomic snapshot of the active range. */
+    public static boolean isActiveRange(int minY, int maxY) {
+        Range range = activeRange;
+        return range.minimumY == minY && range.maximumY == maxY;
+    }
+
     /** Applies the local configuration and records it as the disconnect fallback. */
     public static synchronized void configureLocalRange(int minY, int maxY) {
         validateRange(minY, maxY);
