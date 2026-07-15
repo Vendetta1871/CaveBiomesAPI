@@ -14,6 +14,14 @@ import net.minecraft.world.biome.Biome;
 public interface IWorldVerticalBiomeProvider {
 
     /**
+     * Cheap applicability guard for generation and lookup hot paths. Providers
+     * which only own selected worlds should override this method.
+     */
+    default boolean appliesTo(World world) {
+        return true;
+    }
+
+    /**
      * @param world world owning the queried chunk
      * @param x world block X
      * @param y world block Y

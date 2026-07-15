@@ -45,21 +45,26 @@ public abstract class MixinChunkGeneratorBiome {
 
     @Inject(method = "generateChunk", at = @At("RETURN"))
     private void cavebiomes$decorateCaveBiomes(int cx, int cz, CallbackInfoReturnable<Chunk> cir) {
-        if (!BiomeLayerAPI.hasProviders()) {
+        if (!BiomeLayerAPI.hasProviders(this.world)) {
             return; // inert: default = vanilla
         }
 
         Chunk chunk = cir.getReturnValue();
         ExtendedBlockStorage[] storage = chunk.getBlockStorageArray();
-        byte[] biomeArray = chunk.getBiomeArray();
+        int baseX = cx << 4;
+        int baseZ = cz << 4;
+        // Ask the provider for Biome objects instead of reading Chunk's legacy
+        // byte array. Roughly Enough IDs replaces that array with an inert
+        // compatibility view when biome registry IDs exceed 255.
+        Biome[] baseBiomes = this.world.getBiomeProvider().getBiomes(
+                null, baseX, baseZ, 16, 16);
 
-        int minY = WorldHeightAPI.getMinY();
-        int maxY = WorldHeightAPI.getMaxY();
+        boolean extended = WorldHeightAPI.usesExtendedHeight(this.world);
+        int minY = extended ? WorldHeightAPI.getMinY() : 0;
+        int maxY = extended ? WorldHeightAPI.getMaxY() : 256;
         // Bound the scan to the solid+near-surface band; everything above is open sky.
         int topBound = Math.min(maxY, chunk.getTopFilledSegment() + 16);
 
-        int baseX = cx << 4;
-        int baseZ = cz << 4;
         boolean changed = false;
 
         // Walk cave space (air) and decorate its stone neighbours — proportional to cave
@@ -67,18 +72,18 @@ public abstract class MixinChunkGeneratorBiome {
         for (int lx = 0; lx < 16; lx++) {
             for (int lz = 0; lz < 16; lz++) {
                 for (int y = minY; y < topBound; y++) {
-                    if (cavebiomes$block(storage, lx, y, lz, minY).getBlock() != Blocks.AIR) {
+                    if (cavebiomes$block(storage, lx, y, lz).getBlock() != Blocks.AIR) {
                         continue;
                     }
                     // Six faces of this air block. Vertical neighbours are always in-column;
                     // horizontal ones only when they stay inside this chunk (skip at edges to
                     // avoid forcing adjacent-chunk generation — leaves harmless border seams).
-                    changed |= cavebiomes$decorate(storage, biomeArray, baseX, baseZ, lx, y + 1, lz, minY, maxY);
-                    changed |= cavebiomes$decorate(storage, biomeArray, baseX, baseZ, lx, y - 1, lz, minY, maxY);
-                    if (lx + 1 < 16) changed |= cavebiomes$decorate(storage, biomeArray, baseX, baseZ, lx + 1, y, lz, minY, maxY);
-                    if (lx - 1 >= 0) changed |= cavebiomes$decorate(storage, biomeArray, baseX, baseZ, lx - 1, y, lz, minY, maxY);
-                    if (lz + 1 < 16) changed |= cavebiomes$decorate(storage, biomeArray, baseX, baseZ, lx, y, lz + 1, minY, maxY);
-                    if (lz - 1 >= 0) changed |= cavebiomes$decorate(storage, biomeArray, baseX, baseZ, lx, y, lz - 1, minY, maxY);
+                    changed |= cavebiomes$decorate(storage, baseBiomes, baseX, baseZ, lx, y + 1, lz, minY, maxY);
+                    changed |= cavebiomes$decorate(storage, baseBiomes, baseX, baseZ, lx, y - 1, lz, minY, maxY);
+                    if (lx + 1 < 16) changed |= cavebiomes$decorate(storage, baseBiomes, baseX, baseZ, lx + 1, y, lz, minY, maxY);
+                    if (lx - 1 >= 0) changed |= cavebiomes$decorate(storage, baseBiomes, baseX, baseZ, lx - 1, y, lz, minY, maxY);
+                    if (lz + 1 < 16) changed |= cavebiomes$decorate(storage, baseBiomes, baseX, baseZ, lx, y, lz + 1, minY, maxY);
+                    if (lz - 1 >= 0) changed |= cavebiomes$decorate(storage, baseBiomes, baseX, baseZ, lx, y, lz - 1, minY, maxY);
                 }
             }
         }
@@ -90,8 +95,8 @@ public abstract class MixinChunkGeneratorBiome {
 
     /** Reads a block straight from the section arrays (cheaper than Chunk.getBlockState). */
     @Unique
-    private IBlockState cavebiomes$block(ExtendedBlockStorage[] storage, int lx, int y, int lz, int minY) {
-        int idx = (y - minY) >> 4;
+    private IBlockState cavebiomes$block(ExtendedBlockStorage[] storage, int lx, int y, int lz) {
+        int idx = WorldHeightAPI.sectionIndex(y);
         if (idx < 0 || idx >= storage.length) {
             return Blocks.AIR.getDefaultState();
         }
@@ -107,16 +112,16 @@ public abstract class MixinChunkGeneratorBiome {
      * biome there, replaces it with that biome's surface block. Returns whether it changed.
      */
     @Unique
-    private boolean cavebiomes$decorate(ExtendedBlockStorage[] storage, byte[] biomeArray,
+    private boolean cavebiomes$decorate(ExtendedBlockStorage[] storage, Biome[] baseBiomes,
                                         int baseX, int baseZ, int nx, int ny, int nz,
                                         int minY, int maxY) {
         if (ny < minY || ny >= maxY) {
             return false;
         }
-        if (cavebiomes$block(storage, nx, ny, nz, minY).getBlock() != Blocks.STONE) {
+        if (cavebiomes$block(storage, nx, ny, nz).getBlock() != Blocks.STONE) {
             return false;
         }
-        Biome base = Biome.getBiome(biomeArray[nz << 4 | nx] & 255);
+        Biome base = baseBiomes[nz << 4 | nx];
         if (base == null) {
             return false;
         }

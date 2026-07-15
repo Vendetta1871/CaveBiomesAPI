@@ -81,6 +81,22 @@ public final class BiomeLayerAPI {
         return hasProviders;
     }
 
+    /** Whether at least one registered provider applies to this world. */
+    public static boolean hasProviders(World world) {
+        if (!hasProviders) {
+            return false;
+        }
+        if (!PROVIDERS.isEmpty()) {
+            return true;
+        }
+        for (int i = 0; i < WORLD_PROVIDERS.size(); i++) {
+            if (WORLD_PROVIDERS.get(i).appliesTo(world)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Resolves the biome at a world position, applying registered vertical overrides on top
      * of the vanilla (X/Z) biome.
@@ -119,7 +135,11 @@ public final class BiomeLayerAPI {
             }
         }
         for (int i = 0; i < WORLD_PROVIDERS.size(); i++) {
-            Biome resolved = WORLD_PROVIDERS.get(i).getBiome(world, x, y, z, result);
+            IWorldVerticalBiomeProvider provider = WORLD_PROVIDERS.get(i);
+            if (!provider.appliesTo(world)) {
+                continue;
+            }
+            Biome resolved = provider.getBiome(world, x, y, z, result);
             if (resolved != null) {
                 result = resolved;
             }
