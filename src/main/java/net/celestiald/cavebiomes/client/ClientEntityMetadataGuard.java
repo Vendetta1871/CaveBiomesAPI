@@ -1,8 +1,8 @@
 package net.celestiald.cavebiomes.client;
 
 import net.minecraft.entity.Entity;
-import net.minecraft.network.datasync.DataSerializers;
 import net.minecraft.network.datasync.EntityDataManager;
+import net.minecraft.network.datasync.DataSerializers;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,8 +52,9 @@ public final class ClientEntityMetadataGuard {
 
     private static boolean serializersMatch(EntityDataManager.DataEntry<?> target,
             EntityDataManager.DataEntry<?> source) {
-        return DataSerializers.getSerializerId(target.getKey().getSerializer())
-                == DataSerializers.getSerializerId(source.getKey().getSerializer());
+        // Registry IDs are only diagnostic. Distinct unregistered serializers both report -1,
+        // so equality must use the serializer instance that actually owns the data parameter.
+        return target.getKey().getSerializer() == source.getKey().getSerializer();
     }
 
     private static void reportMismatch(Entity entity,

@@ -3,6 +3,7 @@ package net.celestiald.cavebiomes.network;
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.network.NetworkManager;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
@@ -20,7 +21,8 @@ public final class WorldHeightNetwork {
             NetworkRegistry.INSTANCE.newSimpleChannel("cavebiomes:height");
     private static final WorldHeightNetwork INSTANCE = new WorldHeightNetwork();
     private static boolean initialized;
-    private volatile boolean resetClientRangeWhenWorldCloses;
+    private volatile NetworkManager activeClientConnection;
+    private volatile NetworkManager closingClientConnection;
 
     private WorldHeightNetwork() {}
 
@@ -46,20 +48,25 @@ public final class WorldHeightNetwork {
     @SubscribeEvent
     @SideOnly(Side.CLIENT)
     public void clientConnected(FMLNetworkEvent.ClientConnectedToServerEvent event) {
-        resetClientRangeWhenWorldCloses = false;
+        activeClientConnection = event.getManager();
+        closingClientConnection = null;
         WorldHeightAPI.resetToConfiguredRange();
     }
 
     @SubscribeEvent
     @SideOnly(Side.CLIENT)
     public void clientDisconnected(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
-        resetClientRangeWhenWorldCloses = true;
+        NetworkManager connection = event.getManager();
+        if (connection == activeClientConnection) {
+            closingClientConnection = connection;
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     @SideOnly(Side.CLIENT)
     public void clientTick(TickEvent.ClientTickEvent event) {
-        if (!resetClientRangeWhenWorldCloses) {
+        NetworkManager closing = closingClientConnection;
+        if (closing == null || closing != activeClientConnection) {
             return;
         }
 
@@ -71,8 +78,11 @@ public final class WorldHeightNetwork {
             minecraft.loadWorld(null);
         }
         if (event.phase == TickEvent.Phase.END && minecraft.world == null) {
-            resetClientRangeWhenWorldCloses = false;
-            WorldHeightAPI.resetToConfiguredRange();
+            if (closingClientConnection == closing && activeClientConnection == closing) {
+                closingClientConnection = null;
+                activeClientConnection = null;
+                WorldHeightAPI.resetToConfiguredRange();
+            }
         }
     }
 }

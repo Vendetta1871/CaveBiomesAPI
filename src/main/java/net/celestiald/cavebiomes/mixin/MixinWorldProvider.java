@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(WorldProvider.class)
 public abstract class MixinWorldProvider {
 
-    @Shadow public abstract int getDimension();
+    @Shadow(remap = false) public abstract int getDimension();
 
     @Inject(method = "getHeight", at = @At("HEAD"), cancellable = true, remap = false)
     private void cavebiomes$getHeight(CallbackInfoReturnable<Integer> cir) {

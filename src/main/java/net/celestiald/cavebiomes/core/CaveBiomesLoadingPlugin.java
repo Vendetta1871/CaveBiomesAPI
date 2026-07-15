@@ -14,6 +14,7 @@ public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
         return new String[]{
                 NetworkQueueRaceTransformer.class.getName(),
                 LegacyDataParameterOwnerTransformer.class.getName(),
+                LegacyClientLifecycleTransformer.class.getName(),
                 ClientBlockChangeGuardTransformer.class.getName(),
                 OptiFineRenderChunkTransformer.class.getName(),
                 OptiFineChunkVisibilityTransformer.class.getName(),
