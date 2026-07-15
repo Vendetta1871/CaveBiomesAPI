@@ -26,7 +26,7 @@ public final class BiomeLayerAPI {
 
     /**
      * Registration is rare; iteration is hot and happens concurrently on the render and
-     * server threads. CopyOnWriteArrayList gives lock-free, allocation-free reads.
+     * server threads. CopyOnWriteArrayList gives lock-free snapshot reads.
      */
     private static final List<IVerticalBiomeProvider> PROVIDERS = new CopyOnWriteArrayList<>();
     private static final List<IWorldVerticalBiomeProvider> WORLD_PROVIDERS =
@@ -89,8 +89,8 @@ public final class BiomeLayerAPI {
         if (!PROVIDERS.isEmpty()) {
             return true;
         }
-        for (int i = 0; i < WORLD_PROVIDERS.size(); i++) {
-            if (WORLD_PROVIDERS.get(i).appliesTo(world)) {
+        for (IWorldVerticalBiomeProvider provider : WORLD_PROVIDERS) {
+            if (provider.appliesTo(world)) {
                 return true;
             }
         }
@@ -112,9 +112,10 @@ public final class BiomeLayerAPI {
             return base;
         }
         Biome result = base;
-        // Index loop over the CopyOnWriteArrayList snapshot: no iterator allocation.
-        for (int i = 0; i < PROVIDERS.size(); i++) {
-            Biome r = PROVIDERS.get(i).getBiome(x, y, z, result);
+        // CopyOnWriteArrayList iterators retain one stable snapshot even if a
+        // provider is concurrently unregistered from another thread.
+        for (IVerticalBiomeProvider provider : PROVIDERS) {
+            Biome r = provider.getBiome(x, y, z, result);
             if (r != null) {
                 result = r;
             }
@@ -128,14 +129,13 @@ public final class BiomeLayerAPI {
             return base;
         }
         Biome result = base;
-        for (int i = 0; i < PROVIDERS.size(); i++) {
-            Biome resolved = PROVIDERS.get(i).getBiome(x, y, z, result);
+        for (IVerticalBiomeProvider provider : PROVIDERS) {
+            Biome resolved = provider.getBiome(x, y, z, result);
             if (resolved != null) {
                 result = resolved;
             }
         }
-        for (int i = 0; i < WORLD_PROVIDERS.size(); i++) {
-            IWorldVerticalBiomeProvider provider = WORLD_PROVIDERS.get(i);
+        for (IWorldVerticalBiomeProvider provider : WORLD_PROVIDERS) {
             if (!provider.appliesTo(world)) {
                 continue;
             }
