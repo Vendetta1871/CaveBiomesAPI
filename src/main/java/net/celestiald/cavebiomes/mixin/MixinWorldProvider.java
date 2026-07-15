@@ -12,15 +12,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(WorldProvider.class)
 public abstract class MixinWorldProvider {
 
-    @Shadow protected boolean nether;
+    @Shadow public abstract int getDimension();
 
     @Inject(method = "getHeight", at = @At("HEAD"), cancellable = true, remap = false)
     private void cavebiomes$getHeight(CallbackInfoReturnable<Integer> cir) {
-        cir.setReturnValue(WorldHeightAPI.getMaxY());
+        if (getDimension() == 0) {
+            cir.setReturnValue(WorldHeightAPI.getMaxY());
+        }
     }
 
     @Inject(method = "getActualHeight", at = @At("HEAD"), cancellable = true, remap = false)
     private void cavebiomes$getActualHeight(CallbackInfoReturnable<Integer> cir) {
-        cir.setReturnValue(this.nether ? 128 : WorldHeightAPI.getMaxY());
+        if (getDimension() == 0) {
+            cir.setReturnValue(WorldHeightAPI.getMaxY());
+        }
     }
 }
