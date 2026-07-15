@@ -52,6 +52,20 @@ public final class WorldHeightAPI {
     }
 
     /**
+     * Moves a vanilla lower-world boundary by the active minimum Y.
+     *
+     * <p>Legacy dimension and void handlers commonly express their lower
+     * boundary relative to vanilla's Y=0 floor. For example, a transition at
+     * Y=-10 should occur at Y=-74 in an extended Overworld whose minimum is
+     * Y=-64. Worlds without extended-height semantics keep the supplied
+     * boundary unchanged.</p>
+     */
+    public static double offsetFromVanillaFloor(World world, double vanillaBoundary) {
+        return usesExtendedHeight(world) ? vanillaBoundary + activeRange.minimumY
+                : vanillaBoundary;
+    }
+
+    /**
      * Converts a world Y coordinate to a storageArrays index.
      * Section 0 covers [minY, minY+15].
      */

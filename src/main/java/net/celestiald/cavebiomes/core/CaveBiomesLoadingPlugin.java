@@ -22,6 +22,7 @@ public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
                 LegacyEntityStorageTransformer.class.getName(),
                 LegacyEntityQueryTransformer.class.getName(),
                 LegacyEntityCullingTransformer.class.getName(),
+                LegacyDimensionBoundaryTransformer.class.getName(),
                 DynmapTransformer.class.getName(),
                 FluidloggedApiTransformer.class.getName(),
                 XaeroMapTransformer.class.getName(),
