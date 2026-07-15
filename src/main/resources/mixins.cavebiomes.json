@@ -35,6 +35,7 @@
         "MixinTileEntityBeacon"
     ],
     "client": [
+        "MixinEntityDataManager",
         "MixinChunkClient",
         "MixinChunkCacheClient",
         "MixinViewFrustum",
