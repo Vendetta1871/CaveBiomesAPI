@@ -3,78 +3,91 @@ package net.celestiald.cavebiomes.mixin;
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
-import net.minecraft.util.datafix.DataFixer;
 import net.minecraft.world.World;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.NibbleArray;
 import net.minecraft.world.chunk.storage.AnvilChunkLoader;
-import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.io.File;
-
+/** Extends vanilla Anvil decoding without replacing the loader or its compatibility hooks. */
 @Mixin(AnvilChunkLoader.class)
-public class MixinAnvilChunkLoader {
+public abstract class MixinAnvilChunkLoader {
+
+    @Inject(method = "readChunkFromNBT", at = @At("HEAD"), require = 1)
+    private void cavebiomes$rejectUnsupportedExtendedIds(World world, NBTTagCompound chunkData,
+            CallbackInfoReturnable<?> cir) {
+        if (!requiresRoughlyEnoughIds(chunkData) || hasRoughlyEnoughIds()) {
+            return;
+        }
+        throw new IllegalStateException("Chunk " + chunkData.getInteger("xPos") + ','
+                + chunkData.getInteger("zPos") + " uses RoughlyEnoughIDs palette or biome data, "
+                + "but RoughlyEnoughIDs is not available. Refusing to decode and overwrite it.");
+    }
+
+    /** Resize the vanilla section array while leaving the rest of the decoder intact. */
+    @ModifyConstant(method = "readChunkFromNBT",
+            constant = @Constant(intValue = 16, ordinal = 1), require = 1)
+    private int cavebiomes$sectionArrayLength(int vanillaLength) {
+        return WorldHeightAPI.getSectionCount();
+    }
 
     /**
-     * Replace hardcoded ExtendedBlockStorage[16] with a correctly-sized array,
-     * and use (sectionY - minSection) as the array index so negative section
-     * bytes (e.g. -4 for Y=-64) don't cause ArrayIndexOutOfBoundsException.
-     *
-     * ChunkDataEvent.Load is commented out in Forge 1.12.2 (line 168 in source).
-     * The only Forge hook that must be preserved is capability deserialization.
+     * Convert the persisted absolute section coordinate to an array index. Keeping vanilla's
+     * method body is essential: RoughlyEnoughIDs and other coremods inject their palette and
+     * biome decoding into this method before block data is consumed.
      */
-    @Inject(method = "readChunkFromNBT", at = @At("HEAD"), cancellable = true)
-    private void fixReadChunkFromNBT(World worldIn, NBTTagCompound compound,
-                                     CallbackInfoReturnable<Chunk> cir) {
-        int chunkX = compound.getInteger("xPos");
-        int chunkZ = compound.getInteger("zPos");
-        Chunk chunk = new Chunk(worldIn, chunkX, chunkZ);
-        chunk.setHeightMap(compound.getIntArray("HeightMap"));
-        chunk.setTerrainPopulated(compound.getBoolean("TerrainPopulated"));
-        chunk.setLightPopulated(compound.getBoolean("LightPopulated"));
-        chunk.setInhabitedTime(compound.getLong("InhabitedTime"));
+    @Redirect(method = "readChunkFromNBT",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/nbt/NBTTagCompound;getByte(Ljava/lang/String;)B",
+                    ordinal = 0), require = 1)
+    private byte cavebiomes$normalizePersistedSectionY(NBTTagCompound section, String key) {
+        int sectionY = section.getByte(key);
+        int index = WorldHeightAPI.sectionIndexFromSectionY(sectionY);
+        if (index < 0 || index >= WorldHeightAPI.getSectionCount()) {
+            throw new IllegalStateException("Saved chunk section Y=" + sectionY
+                    + " is outside the configured Cave Biomes API range "
+                    + WorldHeightAPI.getMinY() + ".." + WorldHeightAPI.getMaxY());
+        }
+        return (byte) index;
+    }
 
-        int sectionCount = WorldHeightAPI.getSectionCount();
-        int minSection   = WorldHeightAPI.getMinSection();
-        ExtendedBlockStorage[] sections = new ExtendedBlockStorage[sectionCount];
-        boolean hasSkyLight = worldIn.provider.hasSkyLight();
+    /** Restore the absolute Y passed to ExtendedBlockStorage after normalizing its array index. */
+    @ModifyArg(method = "readChunkFromNBT",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/world/chunk/storage/ExtendedBlockStorage;<init>(IZ)V"),
+            index = 0, require = 1)
+    private int cavebiomes$restoreSectionBaseY(int normalizedBaseY) {
+        return normalizedBaseY + WorldHeightAPI.getMinY();
+    }
 
-        NBTTagList nbtSections = compound.getTagList("Sections", 10);
-        for (int l = 0; l < nbtSections.tagCount(); ++l) {
-            NBTTagCompound sec = nbtSections.getCompoundTagAt(l);
-            int sectionY = sec.getByte("Y");          // signed byte: e.g. -4 for Y=-64
-            int idx = sectionY - minSection;           // normalized to 0-based index
-            if (idx < 0 || idx >= sectionCount) continue;
-
-            ExtendedBlockStorage storage = new ExtendedBlockStorage(sectionY << 4, hasSkyLight);
-            byte[]      blocks = sec.getByteArray("Blocks");
-            NibbleArray data   = new NibbleArray(sec.getByteArray("Data"));
-            NibbleArray extra  = sec.hasKey("Add", 7)
-                    ? new NibbleArray(sec.getByteArray("Add")) : null;
-            storage.getData().setDataFromNBT(blocks, data, extra);
-            storage.setBlockLight(new NibbleArray(sec.getByteArray("BlockLight")));
-            if (hasSkyLight) {
-                storage.setSkyLight(new NibbleArray(sec.getByteArray("SkyLight")));
+    private static boolean requiresRoughlyEnoughIds(NBTTagCompound chunkData) {
+        if (chunkData.hasKey("Biomes", 11)) {
+            return true;
+        }
+        NBTTagList sections = chunkData.getTagList("Sections", 10);
+        for (int index = 0; index < sections.tagCount(); index++) {
+            NBTTagCompound section = sections.getCompoundTagAt(index);
+            if (section.hasKey("Palette", 11) || section.hasKey("Add2", 7)) {
+                return true;
             }
-            storage.recalculateRefCounts();
-            sections[idx] = storage;
         }
+        return false;
+    }
 
-        chunk.setStorageArrays(sections);
-
-        if (compound.hasKey("Biomes", 7)) {
-            chunk.setBiomeArray(compound.getByteArray("Biomes"));
+    private static boolean hasRoughlyEnoughIds() {
+        try {
+            Class.forName("org.dimdev.jeid.ducks.INewBlockStateContainer", false,
+                    MixinAnvilChunkLoader.class.getClassLoader());
+            Class.forName("tff.reid.api.BiomeApi", false,
+                    MixinAnvilChunkLoader.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException unavailable) {
+            return false;
         }
-
-        // Forge capability hook (present in forgeSrc, ChunkDataEvent.Load is commented out)
-        if (chunk.getCapabilities() != null && compound.hasKey("ForgeCaps")) {
-            chunk.getCapabilities().deserializeNBT(compound.getCompoundTag("ForgeCaps"));
-        }
-
-        cir.setReturnValue(chunk);
     }
 }

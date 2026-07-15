@@ -2,6 +2,7 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.tileentity.TileEntityBeacon;
+import net.minecraft.world.World;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -20,15 +21,15 @@ public abstract class MixinTileEntityBeacon {
             "Lnet/minecraft/world/World;getBlockState(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/state/IBlockState;";
 
     @Unique
-    private static int cavebiomes$beamCeilingForDimension(int vanillaCeiling,
-            int dimension) {
-        return dimension == 0 ? WorldHeightAPI.getMaxY() : vanillaCeiling;
+    private static int cavebiomes$beamCeilingForWorld(int vanillaCeiling, World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
+                ? WorldHeightAPI.getMaxY() : vanillaCeiling;
     }
 
     @Unique
-    private static int cavebiomes$baseFloorForDimension(int vanillaFloor,
-            int dimension) {
-        return dimension == 0 ? WorldHeightAPI.getMinY() : vanillaFloor;
+    private static int cavebiomes$baseFloorForWorld(int vanillaFloor, World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
+                ? WorldHeightAPI.getMinY() : vanillaFloor;
     }
 
     @ModifyConstant(
@@ -37,8 +38,7 @@ public abstract class MixinTileEntityBeacon {
             require = 1,
             allow = 1)
     private int cavebiomes$beamCeiling(int vanillaCeiling) {
-        return cavebiomes$beamCeilingForDimension(
-                vanillaCeiling, cavebiomes$dimension());
+        return cavebiomes$beamCeilingForWorld(vanillaCeiling, cavebiomes$world());
     }
 
     @ModifyConstant(
@@ -52,12 +52,11 @@ public abstract class MixinTileEntityBeacon {
             require = 1,
             allow = 1)
     private int cavebiomes$baseFloor(int vanillaFloor) {
-        return cavebiomes$baseFloorForDimension(
-                vanillaFloor, cavebiomes$dimension());
+        return cavebiomes$baseFloorForWorld(vanillaFloor, cavebiomes$world());
     }
 
     @Unique
-    private int cavebiomes$dimension() {
-        return ((TileEntityBeacon) (Object) this).getWorld().provider.getDimension();
+    private World cavebiomes$world() {
+        return ((TileEntityBeacon) (Object) this).getWorld();
     }
 }

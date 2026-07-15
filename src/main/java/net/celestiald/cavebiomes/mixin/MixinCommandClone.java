@@ -2,6 +2,8 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.command.CommandClone;
+import net.minecraft.command.ICommandSender;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.gen.structure.StructureBoundingBox;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,13 +17,15 @@ import org.spongepowered.asm.mixin.injection.Slice;
 public abstract class MixinCommandClone {
 
     @Unique
-    private static int cavebiomes$relativeToMinimum(int worldY) {
-        return worldY - WorldHeightAPI.getMinY();
+    private static int cavebiomes$relativeToMinimum(int worldY, ICommandSender sender) {
+        return WorldHeightAPI.usesExtendedHeight(sender.getEntityWorld())
+                ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Unique
-    private static int cavebiomes$relativeToVanillaMaximum(int worldY) {
-        return worldY - WorldHeightAPI.getMaxY() + 256;
+    private static int cavebiomes$relativeToVanillaMaximum(int worldY, ICommandSender sender) {
+        return WorldHeightAPI.usesExtendedHeight(sender.getEntityWorld())
+                ? worldY - WorldHeightAPI.getMaxY() + 256 : worldY;
     }
 
     @Redirect(
@@ -35,8 +39,9 @@ public abstract class MixinCommandClone {
                     opcode = Opcodes.GETFIELD, ordinal = 0),
             require = 1,
             allow = 1)
-    private int cavebiomes$sourceMinimumY(StructureBoundingBox bounds) {
-        return cavebiomes$relativeToMinimum(bounds.minY);
+    private int cavebiomes$sourceMinimumY(StructureBoundingBox bounds, MinecraftServer server,
+            ICommandSender sender, String[] args) {
+        return cavebiomes$relativeToMinimum(bounds.minY, sender);
     }
 
     @Redirect(
@@ -50,8 +55,9 @@ public abstract class MixinCommandClone {
                     opcode = Opcodes.GETFIELD, ordinal = 0),
             require = 1,
             allow = 1)
-    private int cavebiomes$sourceMaximumY(StructureBoundingBox bounds) {
-        return cavebiomes$relativeToVanillaMaximum(bounds.maxY);
+    private int cavebiomes$sourceMaximumY(StructureBoundingBox bounds, MinecraftServer server,
+            ICommandSender sender, String[] args) {
+        return cavebiomes$relativeToVanillaMaximum(bounds.maxY, sender);
     }
 
     @Redirect(
@@ -65,8 +71,9 @@ public abstract class MixinCommandClone {
                     opcode = Opcodes.GETFIELD, ordinal = 1),
             require = 1,
             allow = 1)
-    private int cavebiomes$destinationMinimumY(StructureBoundingBox bounds) {
-        return cavebiomes$relativeToMinimum(bounds.minY);
+    private int cavebiomes$destinationMinimumY(StructureBoundingBox bounds, MinecraftServer server,
+            ICommandSender sender, String[] args) {
+        return cavebiomes$relativeToMinimum(bounds.minY, sender);
     }
 
     @Redirect(
@@ -80,7 +87,8 @@ public abstract class MixinCommandClone {
                     opcode = Opcodes.GETFIELD, ordinal = 1),
             require = 1,
             allow = 1)
-    private int cavebiomes$destinationMaximumY(StructureBoundingBox bounds) {
-        return cavebiomes$relativeToVanillaMaximum(bounds.maxY);
+    private int cavebiomes$destinationMaximumY(StructureBoundingBox bounds,
+            MinecraftServer server, ICommandSender sender, String[] args) {
+        return cavebiomes$relativeToVanillaMaximum(bounds.maxY, sender);
     }
 }

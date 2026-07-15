@@ -7,6 +7,9 @@ import net.minecraft.world.gen.IChunkGenerator;
 
 /** Loaded-only population scheduling shared by the Chunk mixin and deterministic tests. */
 public final class PopulationRegionScheduler {
+    private static final ThreadLocal<Boolean> PREPARING_DETACHED_REGION =
+            new ThreadLocal<Boolean>();
+
     private PopulationRegionScheduler() {
     }
 
@@ -19,11 +22,17 @@ public final class PopulationRegionScheduler {
 
     public static boolean populateLoadedRegions(IChunkProvider provider, IChunkGenerator generator,
             int loadedChunkX, int loadedChunkZ) {
+        // provideChunk() re-enters Chunk.populate(); wait until the outer preparation is complete.
+        if (Boolean.TRUE.equals(PREPARING_DETACHED_REGION.get())) {
+            return generator instanceof IExtendedPopulationGenerator;
+        }
+        prepareDetachedRegion(provider, generator, loadedChunkX, loadedChunkZ);
         return populateLoadedRegions(loadedChunkX, loadedChunkZ, generator,
                 new LoadedChunkAccess<Chunk>() {
                     @Override
                     public Chunk getLoadedChunk(int chunkX, int chunkZ) {
-                        return provider.getLoadedChunk(chunkX, chunkZ);
+                        Chunk chunk = provider.getLoadedChunk(chunkX, chunkZ);
+                        return chunk != null && chunk.isLoaded() ? chunk : null;
                     }
 
                     @Override
@@ -37,6 +46,63 @@ public final class PopulationRegionScheduler {
                                 .cavebiomes$populate(generator);
                     }
                 });
+    }
+
+    /**
+     * Some pregenerators insert generated chunks directly into the provider and call
+     * {@link Chunk#populate(IChunkProvider, IChunkGenerator)} before {@link Chunk#onLoad()}.
+     * Their vanilla two-by-two preparation is not enough for an extended generator's symmetric
+     * population region. Complete only that detached invocation's declared region; ordinary
+     * loaded chunks retain the loaded-only scheduling contract above.
+     */
+    private static void prepareDetachedRegion(IChunkProvider provider, IChunkGenerator generator,
+            int chunkX, int chunkZ) {
+        if (!(generator instanceof IExtendedPopulationGenerator)
+                || Boolean.TRUE.equals(PREPARING_DETACHED_REGION.get())) {
+            return;
+        }
+        int radius = checkedRadius(
+                ((IExtendedPopulationGenerator) generator).getPopulationRadius());
+        if (!hasDetachedChunk(provider, chunkX, chunkZ, radius)) {
+            return;
+        }
+        PREPARING_DETACHED_REGION.set(Boolean.TRUE);
+        try {
+            for (int offsetX = -radius; offsetX <= radius; ++offsetX) {
+                for (int offsetZ = -radius; offsetZ <= radius; ++offsetZ) {
+                    int neighborX = chunkX + offsetX;
+                    int neighborZ = chunkZ + offsetZ;
+                    if (provider.getLoadedChunk(neighborX, neighborZ) == null) {
+                        provider.provideChunk(neighborX, neighborZ);
+                    }
+                }
+            }
+            // Pregenerators can put chunks in the provider map without running their load lifecycle.
+            for (int offsetX = -radius; offsetX <= radius; ++offsetX) {
+                for (int offsetZ = -radius; offsetZ <= radius; ++offsetZ) {
+                    Chunk neighbor = provider.getLoadedChunk(
+                            chunkX + offsetX, chunkZ + offsetZ);
+                    if (neighbor != null && !neighbor.isLoaded()) {
+                        neighbor.onLoad();
+                    }
+                }
+            }
+        } finally {
+            PREPARING_DETACHED_REGION.remove();
+        }
+    }
+
+    private static boolean hasDetachedChunk(IChunkProvider provider,
+            int centerX, int centerZ, int radius) {
+        for (int offsetX = -radius; offsetX <= radius; ++offsetX) {
+            for (int offsetZ = -radius; offsetZ <= radius; ++offsetZ) {
+                Chunk chunk = provider.getLoadedChunk(centerX + offsetX, centerZ + offsetZ);
+                if (chunk != null && !chunk.isLoaded()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     static <T> boolean populateLoadedRegions(int loadedChunkX, int loadedChunkZ,

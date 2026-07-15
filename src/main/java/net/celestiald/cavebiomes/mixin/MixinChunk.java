@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.celestiald.cavebiomes.api.IExtendedPopulationGenerator;
 import net.celestiald.cavebiomes.api.IWrappedWorldType;
 import net.celestiald.cavebiomes.world.population.ExtendedChunkPopulationAccess;
 import net.celestiald.cavebiomes.world.population.PopulationRegionScheduler;
@@ -94,17 +95,18 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
     @Unique private int yBase(int i) { return i * 16 + WorldHeightAPI.getMinY(); }
 
     @Unique
-    private static boolean cavebiomes$isBlockYInRange(int blockY) {
-        return blockY >= WorldHeightAPI.getMinY() && blockY < WorldHeightAPI.getMaxY();
+    private boolean cavebiomes$isBlockYInRange(int blockY) {
+        return blockY >= cavebiomes$minimumBuildY() && blockY < cavebiomes$maximumBuildY();
     }
 
     @Unique
-    private static int cavebiomes$entityStorageIndex(int sectionY, int sectionCount) {
-        int index = sectionY - WorldHeightAPI.getMinSection();
-        if (index < 0) {
-            return 0;
-        }
-        return Math.min(index, sectionCount - 1);
+    private int cavebiomes$entityStorageIndex(int sectionY, int storageSectionCount) {
+        int minimumSection = cavebiomes$usesExtendedHeight()
+                ? WorldHeightAPI.getMinSection() : 0;
+        int maximumSection = cavebiomes$usesExtendedHeight()
+                ? WorldHeightAPI.getMinSection() + storageSectionCount - 1 : 15;
+        int clampedSection = Math.max(minimumSection, Math.min(sectionY, maximumSection));
+        return clampedSection - WorldHeightAPI.getMinSection();
     }
 
     @Unique
@@ -138,13 +140,23 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
     }
 
     @Unique
-    private static boolean cavebiomes$isAboveMinimumBuildHeight(int worldY) {
-        return worldY > WorldHeightAPI.getMinY();
+    private boolean cavebiomes$isAboveMinimumBuildHeight(int worldY) {
+        return worldY > cavebiomes$minimumBuildY();
     }
 
     @Unique
-    private static boolean cavebiomes$usesExtendedSurfaceRange(int dimension) {
-        return dimension == 0 && WorldHeightAPI.getMinY() < 0;
+    private boolean cavebiomes$usesExtendedHeight() {
+        return WorldHeightAPI.usesExtendedHeight(this.world);
+    }
+
+    @Unique
+    private int cavebiomes$minimumBuildY() {
+        return cavebiomes$usesExtendedHeight() ? WorldHeightAPI.getMinY() : 0;
+    }
+
+    @Unique
+    private int cavebiomes$maximumBuildY() {
+        return cavebiomes$usesExtendedHeight() ? WorldHeightAPI.getMaxY() : 256;
     }
 
     @Unique
@@ -166,12 +178,24 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
 
     @Inject(
             method = "populate(Lnet/minecraft/world/chunk/IChunkProvider;Lnet/minecraft/world/gen/IChunkGenerator;)V",
-            at = @At("HEAD"), cancellable = true, require = 1, allow = 1)
+            at = @At("HEAD"), require = 1, allow = 1)
     private void cavebiomes$populateLoadedRegion(IChunkProvider provider,
             IChunkGenerator generator, CallbackInfo ci) {
-        if (PopulationRegionScheduler.populateLoadedRegions(
-                provider, generator, this.x, this.z)) {
-            ci.cancel();
+        PopulationRegionScheduler.populateLoadedRegions(
+                provider, generator, this.x, this.z);
+    }
+
+    @Redirect(
+            method = "populate(Lnet/minecraft/world/chunk/IChunkProvider;Lnet/minecraft/world/gen/IChunkGenerator;)V",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/world/chunk/Chunk;populate(Lnet/minecraft/world/gen/IChunkGenerator;)V"),
+            require = 4,
+            allow = 4)
+    private void cavebiomes$dispatchPopulation(Chunk candidate,
+            IChunkGenerator generator) {
+        if (!(generator instanceof IExtendedPopulationGenerator)) {
+            ((ExtendedChunkPopulationAccess) (Object) candidate)
+                    .cavebiomes$populate(generator);
         }
     }
 
@@ -192,7 +216,8 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
         // Vanilla initializes this to 4096 (= 16 sections * 16 X * 16 Z), meaning
         // the incremental relight sweep is complete until resetRelightChecks() runs.
         // Preserve that state for the configured number of sections.
-        this.queuedLightChecks = cavebiomes$relightQueueLimit(count);
+        int semanticSectionCount = WorldHeightAPI.usesExtendedHeight(worldIn) ? count : 16;
+        this.queuedLightChecks = cavebiomes$relightQueueLimit(semanticSectionCount);
     }
 
     // =========================================================================
@@ -238,6 +263,9 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
             if (y == 70) iblockstate = ChunkGeneratorDebug.getBlockStateFor(x, z);
             return iblockstate == null ? Blocks.AIR.getDefaultState() : iblockstate;
         }
+        if (!cavebiomes$isBlockYInRange(y)) {
+            return Blocks.AIR.getDefaultState();
+        }
         try {
             int idx = si(y);
             if (idx >= 0 && idx < this.storageArrays.length) {
@@ -268,7 +296,7 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
             require = 1, allow = 1)
     private void cavebiomes$getPrecipitationHeight(BlockPos pos,
             CallbackInfoReturnable<BlockPos> cir) {
-        if (!cavebiomes$usesExtendedSurfaceRange(this.world.provider.getDimension())) {
+        if (!cavebiomes$usesExtendedHeight() || WorldHeightAPI.getMinY() >= 0) {
             return;
         }
 
@@ -395,6 +423,9 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
     public int getLightFor(EnumSkyBlock type, BlockPos pos) {
         int i = pos.getX() & 15;
         int j = pos.getY();
+        if (!cavebiomes$isBlockYInRange(j)) {
+            return type.defaultLightValue;
+        }
         int k = pos.getZ() & 15;
         int idx = si(j);
         ExtendedBlockStorage storage = (idx >= 0 && idx < this.storageArrays.length)
@@ -412,6 +443,9 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
     public void setLightFor(EnumSkyBlock type, BlockPos pos, int value) {
         int i = pos.getX() & 15;
         int j = pos.getY();
+        if (!cavebiomes$isBlockYInRange(j)) {
+            return;
+        }
         int k = pos.getZ() & 15;
         int idx = si(j);
         if (idx < 0 || idx >= this.storageArrays.length) return;
@@ -433,6 +467,9 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
     public int getLightSubtracted(BlockPos pos, int amount) {
         int i = pos.getX() & 15;
         int j = pos.getY();
+        if (!cavebiomes$isBlockYInRange(j)) {
+            return 0;
+        }
         int k = pos.getZ() & 15;
         int idx = si(j);
         ExtendedBlockStorage storage = (idx >= 0 && idx < this.storageArrays.length)
@@ -459,7 +496,7 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
         int j = i;
         if (y > i) j = y;
 
-        int minY = WorldHeightAPI.getMinY();
+        int minY = cavebiomes$minimumBuildY();
         while (j > minY && this.getBlockLightOpacity(x, j - 1, z) == 0) --j;
 
         if (j != i) {
@@ -531,9 +568,9 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
 
     @Overwrite
     public void generateSkylightMap() {
-        int topSeg = this.getTopFilledSegment();
+        int topSeg = Math.min(this.getTopFilledSegment(), cavebiomes$maximumBuildY() - 16);
         this.heightMapMinimum = Integer.MAX_VALUE;
-        int minY = WorldHeightAPI.getMinY();
+        int minY = cavebiomes$minimumBuildY();
 
         for (int j = 0; j < 16; ++j) {
             for (int k = 0; k < 16; ++k) {
@@ -589,7 +626,9 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
      */
     @Overwrite
     public void enqueueRelightChecks() {
-        int sectionCount = this.storageArrays.length;
+        boolean extended = cavebiomes$usesExtendedHeight();
+        int sectionCount = extended ? this.storageArrays.length : 16;
+        int firstSectionIndex = extended ? 0 : -WorldHeightAPI.getMinSection();
         int queueLimit = cavebiomes$relightQueueLimit(sectionCount);
         if (this.queuedLightChecks >= queueLimit) {
             return;
@@ -601,7 +640,8 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
             }
 
             int queueIndex = this.queuedLightChecks++;
-            int sectionIndex = cavebiomes$relightSectionIndex(queueIndex, sectionCount);
+            int sectionIndex = firstSectionIndex
+                    + cavebiomes$relightSectionIndex(queueIndex, sectionCount);
             int localX = cavebiomes$relightLocalX(queueIndex, sectionCount);
             int localZ = cavebiomes$relightLocalZ(queueIndex, sectionCount);
             ExtendedBlockStorage section = this.storageArrays[sectionIndex];
@@ -640,11 +680,12 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
      */
     @Overwrite
     private boolean checkLight(int localX, int localZ) {
-        int topSegment = this.getTopFilledSegment();
+        int topSegment = Math.min(this.getTopFilledSegment(),
+                cavebiomes$maximumBuildY() - 16);
         boolean foundOpaque = false;
         boolean reachedOpaqueBelowSea = false;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(
-                (this.x << 4) + localX, WorldHeightAPI.getMinY(),
+                (this.x << 4) + localX, cavebiomes$minimumBuildY(),
                 (this.z << 4) + localZ);
 
         for (int worldY = topSegment + 16 - 1;
@@ -684,8 +725,10 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
 
     @Overwrite
     public boolean isEmptyBetween(int startY, int endY) {
-        if (startY < WorldHeightAPI.getMinY()) startY = WorldHeightAPI.getMinY();
-        if (endY >= WorldHeightAPI.getMaxY()) endY = WorldHeightAPI.getMaxY() - 1;
+        int minimumY = cavebiomes$minimumBuildY();
+        int maximumY = cavebiomes$maximumBuildY();
+        if (startY < minimumY) startY = minimumY;
+        if (endY >= maximumY) endY = maximumY - 1;
 
         for (int y = startY; y <= endY; y += 16) {
             int idx = si(y);
@@ -760,6 +803,7 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
             },
             at = @At(value = "INVOKE", target = "Lnet/minecraft/util/math/MathHelper;floor(D)I"))
     private int cavebiomes$entitySectionIndex(double value) {
-        return MathHelper.floor(value) - WorldHeightAPI.getMinSection();
+        return cavebiomes$entityStorageIndex(
+                MathHelper.floor(value), this.entityLists.length);
     }
 }

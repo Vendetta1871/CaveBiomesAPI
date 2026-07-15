@@ -13,9 +13,10 @@ import org.spongepowered.asm.mixin.injection.ModifyConstant;
 public abstract class MixinEntityMinecart {
 
     @Unique
-    private static double cavebiomes$thresholdForDimension(
-            double vanillaThreshold, int dimension) {
-        return dimension == 0 ? WorldHeightAPI.getMinY() - 64.0D : vanillaThreshold;
+    private static double cavebiomes$thresholdForWorld(
+            double vanillaThreshold, net.minecraft.world.World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
+                ? WorldHeightAPI.getMinY() - 64.0D : vanillaThreshold;
     }
 
     @ModifyConstant(
@@ -25,7 +26,6 @@ public abstract class MixinEntityMinecart {
             allow = 1)
     private double cavebiomes$voidThreshold(double vanillaThreshold) {
         Entity entity = (Entity) (Object) this;
-        return cavebiomes$thresholdForDimension(
-                vanillaThreshold, entity.world.provider.getDimension());
+        return cavebiomes$thresholdForWorld(vanillaThreshold, entity.world);
     }
 }

@@ -28,13 +28,14 @@ public abstract class MixinTeleporter {
     @Shadow @Final protected WorldServer world;
 
     @Unique
-    private static int cavebiomes$relativeToPortalFloor(int worldY, int dimension) {
-        return dimension == 0 ? worldY - WorldHeightAPI.getMinY() : worldY;
+    private static int cavebiomes$relativeToPortalFloor(int worldY, WorldServer world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
+                ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Unique
-    private static int cavebiomes$portalFloor(int dimension) {
-        return dimension == 0 ? WorldHeightAPI.getMinY() : 0;
+    private static int cavebiomes$portalFloor(WorldServer world) {
+        return WorldHeightAPI.usesExtendedHeight(world) ? WorldHeightAPI.getMinY() : 0;
     }
 
     @Redirect(
@@ -51,7 +52,7 @@ public abstract class MixinTeleporter {
             require = 1,
             allow = 1)
     private int cavebiomes$existingPortalScanY(BlockPos pos) {
-        return cavebiomes$relativeToPortalFloor(pos.getY(), this.world.provider.getDimension());
+        return cavebiomes$relativeToPortalFloor(pos.getY(), this.world);
     }
 
     @ModifyConstant(
@@ -64,7 +65,7 @@ public abstract class MixinTeleporter {
             require = 1,
             allow = 1)
     private int cavebiomes$primaryCandidateFloor(int vanillaFloor) {
-        return cavebiomes$portalFloor(this.world.provider.getDimension());
+        return cavebiomes$portalFloor(this.world);
     }
 
     @ModifyConstant(
@@ -77,7 +78,7 @@ public abstract class MixinTeleporter {
             require = 1,
             allow = 1)
     private int cavebiomes$primaryDescentFloor(int vanillaFloor) {
-        return cavebiomes$portalFloor(this.world.provider.getDimension());
+        return cavebiomes$portalFloor(this.world);
     }
 
     @ModifyConstant(
@@ -90,7 +91,7 @@ public abstract class MixinTeleporter {
             require = 1,
             allow = 1)
     private int cavebiomes$secondaryCandidateFloor(int vanillaFloor) {
-        return cavebiomes$portalFloor(this.world.provider.getDimension());
+        return cavebiomes$portalFloor(this.world);
     }
 
     @ModifyConstant(
@@ -103,6 +104,6 @@ public abstract class MixinTeleporter {
             require = 1,
             allow = 1)
     private int cavebiomes$secondaryDescentFloor(int vanillaFloor) {
-        return cavebiomes$portalFloor(this.world.provider.getDimension());
+        return cavebiomes$portalFloor(this.world);
     }
 }

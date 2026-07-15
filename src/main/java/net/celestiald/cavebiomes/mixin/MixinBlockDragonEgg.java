@@ -3,6 +3,7 @@ package net.celestiald.cavebiomes.mixin;
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.block.BlockDragonEgg;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -14,8 +15,9 @@ import org.spongepowered.asm.mixin.injection.Slice;
 public abstract class MixinBlockDragonEgg {
 
     @Unique
-    private static int cavebiomes$relativeToMinimum(int worldY) {
-        return worldY - WorldHeightAPI.getMinY();
+    private static int cavebiomes$relativeToMinimum(int worldY, World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
+                ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Redirect(
@@ -27,8 +29,8 @@ public abstract class MixinBlockDragonEgg {
                     target = "Lnet/minecraft/util/math/BlockPos;getY()I", ordinal = 0),
             require = 1,
             allow = 1)
-    private int cavebiomes$minimumStartY(BlockPos pos) {
-        return cavebiomes$relativeToMinimum(pos.getY());
+    private int cavebiomes$minimumStartY(BlockPos queriedPos, World world, BlockPos eggPos) {
+        return cavebiomes$relativeToMinimum(queriedPos.getY(), world);
     }
 
     @Redirect(
@@ -41,8 +43,9 @@ public abstract class MixinBlockDragonEgg {
                     target = "Lnet/minecraft/util/math/BlockPos;getY()I", ordinal = 0),
             require = 1,
             allow = 1)
-    private int cavebiomes$synchronousDescentY(BlockPos pos) {
-        return cavebiomes$relativeToMinimum(pos.getY());
+    private int cavebiomes$synchronousDescentY(BlockPos queriedPos, World world,
+            BlockPos eggPos) {
+        return cavebiomes$relativeToMinimum(queriedPos.getY(), world);
     }
 
     @Redirect(
@@ -55,7 +58,8 @@ public abstract class MixinBlockDragonEgg {
                     target = "Lnet/minecraft/util/math/BlockPos;getY()I", ordinal = 1),
             require = 1,
             allow = 1)
-    private int cavebiomes$synchronousLandingY(BlockPos pos) {
-        return cavebiomes$relativeToMinimum(pos.getY());
+    private int cavebiomes$synchronousLandingY(BlockPos queriedPos, World world,
+            BlockPos eggPos) {
+        return cavebiomes$relativeToMinimum(queriedPos.getY(), world);
     }
 }

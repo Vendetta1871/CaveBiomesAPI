@@ -40,9 +40,13 @@ public abstract class MixinChunkCacheClient {
 
     @Overwrite
     private int getLightForExt(EnumSkyBlock type, BlockPos pos) {
+        int minimumY = WorldHeightAPI.usesExtendedHeight(this.world)
+                ? WorldHeightAPI.getMinY() : 0;
+        int maximumY = WorldHeightAPI.usesExtendedHeight(this.world)
+                ? WorldHeightAPI.getMaxY() : 256;
         if (type == EnumSkyBlock.SKY && !this.world.provider.hasSkyLight()) {
             return 0;
-        } else if (pos.getY() >= WorldHeightAPI.getMinY() && pos.getY() < WorldHeightAPI.getMaxY()) {
+        } else if (pos.getY() >= minimumY && pos.getY() < maximumY) {
             if (this.getBlockState(pos).useNeighborBrightness()) {
                 int l = 0;
                 for (EnumFacing enumfacing : EnumFacing.values()) {
@@ -64,7 +68,11 @@ public abstract class MixinChunkCacheClient {
 
     @Overwrite
     public int getLightFor(EnumSkyBlock type, BlockPos pos) {
-        if (pos.getY() >= WorldHeightAPI.getMinY() && pos.getY() < WorldHeightAPI.getMaxY()) {
+        int minimumY = WorldHeightAPI.usesExtendedHeight(this.world)
+                ? WorldHeightAPI.getMinY() : 0;
+        int maximumY = WorldHeightAPI.usesExtendedHeight(this.world)
+                ? WorldHeightAPI.getMaxY() : 256;
+        if (pos.getY() >= minimumY && pos.getY() < maximumY) {
             int i = (pos.getX() >> 4) - this.chunkX;
             int j = (pos.getZ() >> 4) - this.chunkZ;
             if (!this.withinBounds(i, j)) return type.defaultLightValue;

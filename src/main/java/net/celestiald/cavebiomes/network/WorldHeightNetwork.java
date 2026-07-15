@@ -1,12 +1,16 @@
 package net.celestiald.cavebiomes.network;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.network.NetworkManager;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
+import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
@@ -17,6 +21,8 @@ public final class WorldHeightNetwork {
             NetworkRegistry.INSTANCE.newSimpleChannel("cavebiomes:height");
     private static final WorldHeightNetwork INSTANCE = new WorldHeightNetwork();
     private static boolean initialized;
+    private volatile NetworkManager activeClientConnection;
+    private volatile NetworkManager closingClientConnection;
 
     private WorldHeightNetwork() {}
 
@@ -42,12 +48,41 @@ public final class WorldHeightNetwork {
     @SubscribeEvent
     @SideOnly(Side.CLIENT)
     public void clientConnected(FMLNetworkEvent.ClientConnectedToServerEvent event) {
+        activeClientConnection = event.getManager();
+        closingClientConnection = null;
         WorldHeightAPI.resetToConfiguredRange();
     }
 
     @SubscribeEvent
     @SideOnly(Side.CLIENT)
     public void clientDisconnected(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
-        WorldHeightAPI.resetToConfiguredRange();
+        NetworkManager connection = event.getManager();
+        if (connection == activeClientConnection) {
+            closingClientConnection = connection;
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    @SideOnly(Side.CLIENT)
+    public void clientTick(TickEvent.ClientTickEvent event) {
+        NetworkManager closing = closingClientConnection;
+        if (closing == null || closing != activeClientConnection) {
+            return;
+        }
+
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (event.phase == TickEvent.Phase.START && minecraft.world != null) {
+            // Some legacy network handlers finish their disconnect callbacks without making
+            // vanilla unload the client world. Do it on the client thread before that stale
+            // world can tick entities or render another frame.
+            minecraft.loadWorld(null);
+        }
+        if (event.phase == TickEvent.Phase.END && minecraft.world == null) {
+            if (closingClientConnection == closing && activeClientConnection == closing) {
+                closingClientConnection = null;
+                activeClientConnection = null;
+                WorldHeightAPI.resetToConfiguredRange();
+            }
+        }
     }
 }

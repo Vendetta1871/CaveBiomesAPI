@@ -11,7 +11,26 @@ import java.util.Map;
 public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
 
     @Override public String[] getASMTransformerClass() {
-        return new String[]{NetworkQueueRaceTransformer.class.getName()};
+        return new String[]{
+                NetworkQueueRaceTransformer.class.getName(),
+                LegacyDataParameterOwnerTransformer.class.getName(),
+                LegacyClientLifecycleTransformer.class.getName(),
+                ClientBlockChangeGuardTransformer.class.getName(),
+                OptiFineRenderChunkTransformer.class.getName(),
+                OptiFineChunkVisibilityTransformer.class.getName(),
+                LegacyEntityRenderTransformer.class.getName(),
+                LegacyEntityStorageTransformer.class.getName(),
+                LegacyEntityQueryTransformer.class.getName(),
+                LegacyEntityCullingTransformer.class.getName(),
+                LegacyDimensionBoundaryTransformer.class.getName(),
+                DynmapTransformer.class.getName(),
+                FluidloggedApiTransformer.class.getName(),
+                XaeroMapTransformer.class.getName(),
+                LegacyModSectionTransformer.class.getName(),
+                LegacyWorldgenSectionTransformer.class.getName(),
+                LegacyPlacementSectionTransformer.class.getName(),
+                CqrSectionTransformer.class.getName()
+        };
     }
     @Override public String getModContainerClass() { return null; }
     @Override public String getSetupClass() { return null; }

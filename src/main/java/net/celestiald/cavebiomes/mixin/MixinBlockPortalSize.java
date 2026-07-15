@@ -19,8 +19,9 @@ public abstract class MixinBlockPortalSize {
     @Shadow @Final private World world;
 
     @Unique
-    private static int cavebiomes$relativeToPortalFloor(int worldY, int dimension) {
-        return dimension == 0 ? worldY - WorldHeightAPI.getMinY() : worldY;
+    private static int cavebiomes$relativeToPortalFloor(int worldY, World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
+                ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Redirect(
@@ -35,6 +36,6 @@ public abstract class MixinBlockPortalSize {
             require = 1,
             allow = 1)
     private int cavebiomes$frameDescentY(BlockPos pos) {
-        return cavebiomes$relativeToPortalFloor(pos.getY(), this.world.provider.getDimension());
+        return cavebiomes$relativeToPortalFloor(pos.getY(), this.world);
     }
 }

@@ -17,8 +17,9 @@ public abstract class MixinWorldEntitySpawner {
 
     @Unique
     private static int cavebiomes$sampleSpawnY(Random random, int vanillaUpperBound,
-            int dimension) {
-        int minimumY = dimension == 0 ? WorldHeightAPI.getMinY() : 0;
+            World world) {
+        int minimumY = WorldHeightAPI.usesExtendedHeight(world)
+                ? WorldHeightAPI.getMinY() : 0;
         return minimumY + random.nextInt(vanillaUpperBound - minimumY);
     }
 
@@ -34,7 +35,6 @@ public abstract class MixinWorldEntitySpawner {
             allow = 1)
     private static int cavebiomes$selectSpawnY(Random random, int vanillaUpperBound,
             World world, int chunkX, int chunkZ) {
-        return cavebiomes$sampleSpawnY(
-                random, vanillaUpperBound, world.provider.getDimension());
+        return cavebiomes$sampleSpawnY(random, vanillaUpperBound, world);
     }
 }

@@ -5,6 +5,7 @@ import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.ChunkCache;
+import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -25,10 +26,15 @@ public abstract class MixinChunkCache {
     @Shadow protected int chunkX;
     @Shadow protected int chunkZ;
     @Shadow protected Chunk[][] chunkArray;
+    @Shadow protected World world;
 
     @Overwrite
     public IBlockState getBlockState(BlockPos pos) {
-        if (pos.getY() >= WorldHeightAPI.getMinY() && pos.getY() < WorldHeightAPI.getMaxY()) {
+        int minimumY = WorldHeightAPI.usesExtendedHeight(this.world)
+                ? WorldHeightAPI.getMinY() : 0;
+        int maximumY = WorldHeightAPI.usesExtendedHeight(this.world)
+                ? WorldHeightAPI.getMaxY() : 256;
+        if (pos.getY() >= minimumY && pos.getY() < maximumY) {
             int i = (pos.getX() >> 4) - this.chunkX;
             int j = (pos.getZ() >> 4) - this.chunkZ;
 

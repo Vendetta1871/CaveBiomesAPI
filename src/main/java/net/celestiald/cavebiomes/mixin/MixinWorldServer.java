@@ -12,9 +12,9 @@ import org.spongepowered.asm.mixin.injection.ModifyConstant;
 public abstract class MixinWorldServer {
 
     @Unique
-    private static int cavebiomes$precipitationSentinelForDimension(
-            int vanillaSentinel, int dimension) {
-        return dimension == 0 && WorldHeightAPI.getMinY() < 0
+    private static int cavebiomes$precipitationSentinelForWorld(
+            int vanillaSentinel, WorldServer world) {
+        return WorldHeightAPI.usesExtendedHeight(world) && WorldHeightAPI.getMinY() < 0
                 ? WorldHeightAPI.getMinY() - 1
                 : vanillaSentinel;
     }
@@ -26,7 +26,6 @@ public abstract class MixinWorldServer {
             allow = 1)
     private int cavebiomes$emptyPrecipitationHeight(int vanillaSentinel) {
         WorldServer world = (WorldServer) (Object) this;
-        return cavebiomes$precipitationSentinelForDimension(
-                vanillaSentinel, world.provider.getDimension());
+        return cavebiomes$precipitationSentinelForWorld(vanillaSentinel, world);
     }
 }
