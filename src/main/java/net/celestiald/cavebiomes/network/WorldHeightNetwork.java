@@ -9,6 +9,7 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
+import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
@@ -55,12 +56,21 @@ public final class WorldHeightNetwork {
         resetClientRangeWhenWorldCloses = true;
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     @SideOnly(Side.CLIENT)
     public void clientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase == TickEvent.Phase.END
-                && resetClientRangeWhenWorldCloses
-                && Minecraft.getMinecraft().world == null) {
+        if (!resetClientRangeWhenWorldCloses) {
+            return;
+        }
+
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (event.phase == TickEvent.Phase.START && minecraft.world != null) {
+            // Some legacy network handlers finish their disconnect callbacks without making
+            // vanilla unload the client world. Do it on the client thread before that stale
+            // world can tick entities or render another frame.
+            minecraft.loadWorld(null);
+        }
+        if (event.phase == TickEvent.Phase.END && minecraft.world == null) {
             resetClientRangeWhenWorldCloses = false;
             WorldHeightAPI.resetToConfiguredRange();
         }
