@@ -7,6 +7,9 @@ import net.minecraft.world.gen.IChunkGenerator;
 
 /** Loaded-only population scheduling shared by the Chunk mixin and deterministic tests. */
 public final class PopulationRegionScheduler {
+    private static final ThreadLocal<Boolean> PREPARING_DETACHED_REGION =
+            new ThreadLocal<Boolean>();
+
     private PopulationRegionScheduler() {
     }
 
@@ -19,6 +22,7 @@ public final class PopulationRegionScheduler {
 
     public static boolean populateLoadedRegions(IChunkProvider provider, IChunkGenerator generator,
             int loadedChunkX, int loadedChunkZ) {
+        prepareDetachedRegion(provider, generator, loadedChunkX, loadedChunkZ);
         return populateLoadedRegions(loadedChunkX, loadedChunkZ, generator,
                 new LoadedChunkAccess<Chunk>() {
                     @Override
@@ -37,6 +41,41 @@ public final class PopulationRegionScheduler {
                                 .cavebiomes$populate(generator);
                     }
                 });
+    }
+
+    /**
+     * Some pregenerators insert generated chunks directly into the provider and call
+     * {@link Chunk#populate(IChunkProvider, IChunkGenerator)} before {@link Chunk#onLoad()}.
+     * Their vanilla two-by-two preparation is not enough for an extended generator's symmetric
+     * population region. Complete only that detached invocation's declared region; ordinary
+     * loaded chunks retain the loaded-only scheduling contract above.
+     */
+    private static void prepareDetachedRegion(IChunkProvider provider, IChunkGenerator generator,
+            int chunkX, int chunkZ) {
+        if (!(generator instanceof IExtendedPopulationGenerator)
+                || Boolean.TRUE.equals(PREPARING_DETACHED_REGION.get())) {
+            return;
+        }
+        Chunk invokingChunk = provider.getLoadedChunk(chunkX, chunkZ);
+        if (invokingChunk == null || invokingChunk.isLoaded()) {
+            return;
+        }
+        int radius = checkedRadius(
+                ((IExtendedPopulationGenerator) generator).getPopulationRadius());
+        PREPARING_DETACHED_REGION.set(Boolean.TRUE);
+        try {
+            for (int offsetX = -radius; offsetX <= radius; ++offsetX) {
+                for (int offsetZ = -radius; offsetZ <= radius; ++offsetZ) {
+                    int neighborX = chunkX + offsetX;
+                    int neighborZ = chunkZ + offsetZ;
+                    if (provider.getLoadedChunk(neighborX, neighborZ) == null) {
+                        provider.provideChunk(neighborX, neighborZ);
+                    }
+                }
+            }
+        } finally {
+            PREPARING_DETACHED_REGION.remove();
+        }
     }
 
     static <T> boolean populateLoadedRegions(int loadedChunkX, int loadedChunkZ,
