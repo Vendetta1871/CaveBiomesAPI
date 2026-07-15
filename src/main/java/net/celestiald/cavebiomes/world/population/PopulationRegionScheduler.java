@@ -31,7 +31,8 @@ public final class PopulationRegionScheduler {
                 new LoadedChunkAccess<Chunk>() {
                     @Override
                     public Chunk getLoadedChunk(int chunkX, int chunkZ) {
-                        return provider.getLoadedChunk(chunkX, chunkZ);
+                        Chunk chunk = provider.getLoadedChunk(chunkX, chunkZ);
+                        return chunk != null && chunk.isLoaded() ? chunk : null;
                     }
 
                     @Override
@@ -60,12 +61,11 @@ public final class PopulationRegionScheduler {
                 || Boolean.TRUE.equals(PREPARING_DETACHED_REGION.get())) {
             return;
         }
-        Chunk invokingChunk = provider.getLoadedChunk(chunkX, chunkZ);
-        if (invokingChunk == null || invokingChunk.isLoaded()) {
-            return;
-        }
         int radius = checkedRadius(
                 ((IExtendedPopulationGenerator) generator).getPopulationRadius());
+        if (!hasDetachedChunk(provider, chunkX, chunkZ, radius)) {
+            return;
+        }
         PREPARING_DETACHED_REGION.set(Boolean.TRUE);
         try {
             for (int offsetX = -radius; offsetX <= radius; ++offsetX) {
@@ -90,6 +90,19 @@ public final class PopulationRegionScheduler {
         } finally {
             PREPARING_DETACHED_REGION.remove();
         }
+    }
+
+    private static boolean hasDetachedChunk(IChunkProvider provider,
+            int centerX, int centerZ, int radius) {
+        for (int offsetX = -radius; offsetX <= radius; ++offsetX) {
+            for (int offsetZ = -radius; offsetZ <= radius; ++offsetZ) {
+                Chunk chunk = provider.getLoadedChunk(centerX + offsetX, centerZ + offsetZ);
+                if (chunk != null && !chunk.isLoaded()) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     static <T> boolean populateLoadedRegions(int loadedChunkX, int loadedChunkZ,
