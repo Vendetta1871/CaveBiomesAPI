@@ -18,6 +18,9 @@ public abstract class MixinCommandBase {
     private static void cavebiomes$parseBlockPos(ICommandSender sender, String[] args,
             int startIndex, boolean centerBlock,
             CallbackInfoReturnable<BlockPos> cir) throws NumberInvalidException {
+        if (!WorldHeightAPI.usesExtendedHeight(sender.getEntityWorld())) {
+            return;
+        }
         BlockPos origin = sender.getPosition();
         cir.setReturnValue(new BlockPos(
                 CommandBase.parseDouble(origin.getX(), args[startIndex],

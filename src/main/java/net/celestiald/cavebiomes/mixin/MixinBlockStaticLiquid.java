@@ -28,13 +28,14 @@ public abstract class MixinBlockStaticLiquid {
                     + "Lnet/minecraft/block/state/IBlockState;";
 
     @Unique
-    private static int cavebiomes$relativeToMinimum(int worldY, int dimension) {
-        return dimension == 0 ? worldY - WorldHeightAPI.getMinY() : worldY;
+    private static int cavebiomes$relativeToMinimum(int worldY, World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
+                ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Unique
-    private static int cavebiomes$relativeToMaximum(int worldY, int dimension) {
-        return dimension == 0
+    private static int cavebiomes$relativeToMaximum(int worldY, World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
                 ? worldY - WorldHeightAPI.getMaxY() + 256
                 : worldY;
     }
@@ -50,8 +51,7 @@ public abstract class MixinBlockStaticLiquid {
             allow = 1)
     private int cavebiomes$ascendingCandidateFloor(BlockPos candidate, World world,
             BlockPos lavaPos, IBlockState state, Random random) {
-        return cavebiomes$relativeToMinimum(
-                candidate.getY(), world.provider.getDimension());
+        return cavebiomes$relativeToMinimum(candidate.getY(), world);
     }
 
     @Redirect(
@@ -65,8 +65,7 @@ public abstract class MixinBlockStaticLiquid {
             allow = 1)
     private int cavebiomes$horizontalCandidateFloor(BlockPos candidate, World world,
             BlockPos lavaPos, IBlockState state, Random random) {
-        return cavebiomes$relativeToMinimum(
-                candidate.getY(), world.provider.getDimension());
+        return cavebiomes$relativeToMinimum(candidate.getY(), world);
     }
 
     @Redirect(
@@ -80,8 +79,7 @@ public abstract class MixinBlockStaticLiquid {
             allow = 1)
     private int cavebiomes$horizontalCandidateCeiling(BlockPos candidate, World world,
             BlockPos lavaPos, IBlockState state, Random random) {
-        return cavebiomes$relativeToMaximum(
-                candidate.getY(), world.provider.getDimension());
+        return cavebiomes$relativeToMaximum(candidate.getY(), world);
     }
 
     @Redirect(
@@ -94,8 +92,7 @@ public abstract class MixinBlockStaticLiquid {
             allow = 1)
     private int cavebiomes$flammableCandidateFloor(BlockPos candidate, World world,
             BlockPos checkedPos) {
-        return cavebiomes$relativeToMinimum(
-                candidate.getY(), world.provider.getDimension());
+        return cavebiomes$relativeToMinimum(candidate.getY(), world);
     }
 
     @Redirect(
@@ -106,7 +103,6 @@ public abstract class MixinBlockStaticLiquid {
             allow = 1)
     private int cavebiomes$flammableCandidateCeiling(BlockPos candidate, World world,
             BlockPos checkedPos) {
-        return cavebiomes$relativeToMaximum(
-                candidate.getY(), world.provider.getDimension());
+        return cavebiomes$relativeToMaximum(candidate.getY(), world);
     }
 }

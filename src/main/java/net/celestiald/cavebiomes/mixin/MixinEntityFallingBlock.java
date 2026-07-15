@@ -14,13 +14,17 @@ import org.spongepowered.asm.mixin.injection.Slice;
 public abstract class MixinEntityFallingBlock {
 
     @Unique
-    private static int cavebiomes$relativeToMinimum(int worldY) {
-        return worldY - WorldHeightAPI.getMinY();
+    private int cavebiomes$relativeToMinimum(int worldY) {
+        EntityFallingBlock entity = (EntityFallingBlock) (Object) this;
+        return WorldHeightAPI.usesExtendedHeight(entity.world)
+                ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Unique
-    private static int cavebiomes$relativeToVanillaMaximum(int worldY) {
-        return worldY - WorldHeightAPI.getMaxY() + 256;
+    private int cavebiomes$relativeToVanillaMaximum(int worldY) {
+        EntityFallingBlock entity = (EntityFallingBlock) (Object) this;
+        return WorldHeightAPI.usesExtendedHeight(entity.world)
+                ? worldY - WorldHeightAPI.getMaxY() + 256 : worldY;
     }
 
     @Redirect(

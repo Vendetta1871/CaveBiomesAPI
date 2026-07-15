@@ -5,6 +5,7 @@ import net.celestiald.cavebiomes.client.IViewFrustumExt;
 import net.minecraft.client.renderer.RenderGlobal;
 import net.minecraft.client.renderer.ViewFrustum;
 import net.minecraft.client.renderer.chunk.RenderChunk;
+import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
@@ -24,6 +25,7 @@ public abstract class MixinRenderGlobal {
 
     @Shadow private ViewFrustum viewFrustum;
     @Shadow private int renderDistanceChunks;
+    @Shadow private WorldClient world;
 
     // =========================================================================
     // setupTerrain() walks the render-chunk visibility graph via this private
@@ -47,10 +49,14 @@ public abstract class MixinRenderGlobal {
             RenderChunk renderChunkBase, EnumFacing facing,
             CallbackInfoReturnable<RenderChunk> cir) {
         BlockPos blockpos = renderChunkBase.getBlockPosOffset16(facing);
+        int minimumY = WorldHeightAPI.usesExtendedHeight(this.world)
+                ? WorldHeightAPI.getMinY() : 0;
+        int maximumY = WorldHeightAPI.usesExtendedHeight(this.world)
+                ? WorldHeightAPI.getMaxY() : 256;
 
         if (MathHelper.abs(playerPos.getX() - blockpos.getX()) > this.renderDistanceChunks * 16) {
             cir.setReturnValue(null);
-        } else if (blockpos.getY() >= WorldHeightAPI.getMinY() && blockpos.getY() < WorldHeightAPI.getMaxY()) {
+        } else if (blockpos.getY() >= minimumY && blockpos.getY() < maximumY) {
             cir.setReturnValue(MathHelper.abs(playerPos.getZ() - blockpos.getZ())
                     > this.renderDistanceChunks * 16
                     ? null

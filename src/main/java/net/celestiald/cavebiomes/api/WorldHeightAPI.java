@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.api;
 
 import net.celestiald.cavebiomes.config.WorldHeightConfig;
+import net.minecraft.world.World;
 
 /**
  * Public API for querying configured world height.
@@ -35,6 +36,19 @@ public final class WorldHeightAPI {
      */
     public static int getMinSection() {
         return activeRange.minimumSection;
+    }
+
+    /**
+     * Returns whether this world deliberately opted into extended-height
+     * semantics. Chunk storage remains wide for every world because the array
+     * layout is process-wide, but only marked Overworld types use the extended
+     * build range.
+     */
+    public static boolean usesExtendedHeight(World world) {
+        return world != null
+                && world.provider != null
+                && world.provider.getDimension() == 0
+                && world.getWorldType() instanceof IExtendedHeightWorldType;
     }
 
     /**

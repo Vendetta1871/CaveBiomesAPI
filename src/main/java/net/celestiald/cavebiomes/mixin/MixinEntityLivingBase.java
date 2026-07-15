@@ -13,8 +13,10 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class MixinEntityLivingBase {
 
     @Unique
-    private static int cavebiomes$relativeToTeleportFloor(int worldY, int dimension) {
-        return dimension == 0 ? worldY - WorldHeightAPI.getMinY() : worldY;
+    private static int cavebiomes$relativeToTeleportFloor(int worldY,
+            net.minecraft.world.World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
+                ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Redirect(
@@ -26,7 +28,6 @@ public abstract class MixinEntityLivingBase {
             allow = 1)
     private int cavebiomes$teleportLandingFloor(BlockPos pos) {
         EntityLivingBase entity = (EntityLivingBase) (Object) this;
-        return cavebiomes$relativeToTeleportFloor(
-                pos.getY(), entity.world.provider.getDimension());
+        return cavebiomes$relativeToTeleportFloor(pos.getY(), entity.world);
     }
 }

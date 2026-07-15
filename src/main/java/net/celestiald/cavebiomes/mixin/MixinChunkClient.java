@@ -3,6 +3,8 @@ package net.celestiald.cavebiomes.mixin;
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
+import net.minecraft.world.World;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
@@ -22,6 +24,7 @@ public abstract class MixinChunkClient {
     @Shadow private int heightMapMinimum;
     @Shadow private int[] precipitationHeightMap;
     @Shadow private boolean dirty;
+    @Shadow @Final private World world;
 
     @Shadow public abstract int getTopFilledSegment();
     @Shadow private int getBlockLightOpacity(int x, int y, int z) { return 0; }
@@ -32,9 +35,11 @@ public abstract class MixinChunkClient {
 
     @Overwrite
     protected void generateHeightMap() {
-        int topSeg = this.getTopFilledSegment();
+        boolean extended = WorldHeightAPI.usesExtendedHeight(this.world);
+        int maximumY = extended ? WorldHeightAPI.getMaxY() : 256;
+        int topSeg = Math.min(this.getTopFilledSegment(), maximumY - 16);
         this.heightMapMinimum = Integer.MAX_VALUE;
-        int minY = WorldHeightAPI.getMinY();
+        int minY = extended ? WorldHeightAPI.getMinY() : 0;
 
         for (int j = 0; j < 16; ++j) {
             for (int k = 0; k < 16; ++k) {

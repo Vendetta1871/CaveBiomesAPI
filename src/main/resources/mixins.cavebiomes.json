@@ -28,7 +28,7 @@
         "MixinPlayerChunkMapEntry",
         "MixinSPacketChunkData",
         "MixinChunkCache",
-        "MixinMinecraftServer",
+        "MixinNetHandlerPlayServer",
         "MixinPlayerList",
         "MixinTeleporter",
         "MixinWorldEntitySpawner",

@@ -39,8 +39,14 @@ public abstract class MixinWorld {
     @Shadow public abstract int getLightFor(EnumSkyBlock type, BlockPos pos);
 
     @Unique
-    private static boolean cavebiomes$usesExtendedSurfaceRange(int dimension) {
-        return dimension == 0 && WorldHeightAPI.getMinY() < 0;
+    private static boolean cavebiomes$usesExtendedSurfaceRange(World world) {
+        return WorldHeightAPI.usesExtendedHeight(world) && WorldHeightAPI.getMinY() < 0;
+    }
+
+    @Unique
+    private boolean cavebiomes$usesExtendedRange() {
+        World world = (World) (Object) this;
+        return WorldHeightAPI.usesExtendedHeight(world);
     }
 
     @Unique
@@ -54,7 +60,10 @@ public abstract class MixinWorld {
 
     @Inject(method = "isOutsideBuildHeight", at = @At("HEAD"), cancellable = true)
     private void fixOutsideBuildHeight(BlockPos pos, CallbackInfoReturnable<Boolean> cir) {
-        cir.setReturnValue(pos.getY() < WorldHeightAPI.getMinY() || pos.getY() >= WorldHeightAPI.getMaxY());
+        if (cavebiomes$usesExtendedRange()) {
+            cir.setReturnValue(pos.getY() < WorldHeightAPI.getMinY()
+                    || pos.getY() >= WorldHeightAPI.getMaxY());
+        }
     }
 
     // Reimplement the small private bound/loaded-chunk loop. Using expandZeroConditions here also
@@ -63,6 +72,9 @@ public abstract class MixinWorld {
     private void cavebiomes$isAreaLoaded(int fromX, int fromY, int fromZ,
             int toX, int toY, int toZ, boolean allowEmpty,
             CallbackInfoReturnable<Boolean> cir) {
+        if (!cavebiomes$usesExtendedRange()) {
+            return;
+        }
         if (toY < WorldHeightAPI.getMinY() || fromY >= WorldHeightAPI.getMaxY()) {
             cir.setReturnValue(false);
             return;
@@ -93,23 +105,27 @@ public abstract class MixinWorld {
     @ModifyConstant(method = "getLight(Lnet/minecraft/util/math/BlockPos;)I",
             constant = @Constant(intValue = 256))
     private int fixGetLightMaxY(int original) {
-        return WorldHeightAPI.getMaxY();
+        return cavebiomes$usesExtendedRange() ? WorldHeightAPI.getMaxY() : original;
     }
 
     @ModifyConstant(method = "getLight(Lnet/minecraft/util/math/BlockPos;Z)I",
             constant = @Constant(intValue = 256))
     private int fixGetLightBoolMaxY(int original) {
-        return WorldHeightAPI.getMaxY();
+        return cavebiomes$usesExtendedRange() ? WorldHeightAPI.getMaxY() : original;
     }
 
     @Inject(method = "getLight(Lnet/minecraft/util/math/BlockPos;)I", at = @At("HEAD"), cancellable = true)
     private void fixGetLightClamp(BlockPos pos, CallbackInfoReturnable<Integer> cir) {
-        if (pos.getY() < WorldHeightAPI.getMinY()) cir.setReturnValue(0);
+        if (cavebiomes$usesExtendedRange() && pos.getY() < WorldHeightAPI.getMinY()) {
+            cir.setReturnValue(0);
+        }
     }
 
     @Inject(method = "getLight(Lnet/minecraft/util/math/BlockPos;Z)I", at = @At("HEAD"), cancellable = true)
     private void fixGetLightBoolClamp(BlockPos pos, boolean checkNeighbors, CallbackInfoReturnable<Integer> cir) {
-        if (pos.getY() < WorldHeightAPI.getMinY()) cir.setReturnValue(0);
+        if (cavebiomes$usesExtendedRange() && pos.getY() < WorldHeightAPI.getMinY()) {
+            cir.setReturnValue(0);
+        }
     }
 
     // getLightFor: vanilla clamps Y<0 to Y=0 and rejects Y>=256 via isValid(pos).
@@ -118,6 +134,7 @@ public abstract class MixinWorld {
     @Inject(method = "getLightFor", at = @At("HEAD"), cancellable = true)
     private void fixGetLightFor(EnumSkyBlock type, BlockPos pos,
                                  CallbackInfoReturnable<Integer> cir) {
+        if (!cavebiomes$usesExtendedRange()) return;
         int y = pos.getY();
         if (y >= 0 && y < 256) return;
         if (y < WorldHeightAPI.getMinY() || y >= WorldHeightAPI.getMaxY()) {
@@ -132,6 +149,7 @@ public abstract class MixinWorld {
     // The BFS never writes light values outside [0,256), so chunk arrays stay at 0 (darkness).
     @Inject(method = "setLightFor", at = @At("HEAD"), cancellable = true)
     private void fixSetLightFor(EnumSkyBlock type, BlockPos pos, int lightValue, CallbackInfo ci) {
+        if (!cavebiomes$usesExtendedRange()) return;
         int y = pos.getY();
         if (y >= 0 && y < 256) return;
         if (y >= WorldHeightAPI.getMinY() && y < WorldHeightAPI.getMaxY()
@@ -147,6 +165,7 @@ public abstract class MixinWorld {
     @Inject(method = "getLightFromNeighborsFor", at = @At("HEAD"), cancellable = true)
     private void fixGetLightFromNeighborsFor(EnumSkyBlock type, BlockPos pos,
                                               CallbackInfoReturnable<Integer> cir) {
+        if (!cavebiomes$usesExtendedRange()) return;
         int y = pos.getY();
         if (y >= 0 && y < 256) return;
         if (y < WorldHeightAPI.getMinY() || y >= WorldHeightAPI.getMaxY()) {
@@ -168,7 +187,7 @@ public abstract class MixinWorld {
     private void cavebiomes$getTopSolidOrLiquidBlock(BlockPos pos,
             CallbackInfoReturnable<BlockPos> cir) {
         World world = (World) (Object) this;
-        if (!cavebiomes$usesExtendedSurfaceRange(world.provider.getDimension())) {
+        if (!cavebiomes$usesExtendedSurfaceRange(world)) {
             return;
         }
 
@@ -198,6 +217,7 @@ public abstract class MixinWorld {
     @Inject(method = "canSnowAtBody", at = @At("HEAD"), cancellable = true, remap = false)
     private void cavebiomes$canSnowAtBody(BlockPos pos, boolean checkLight,
             CallbackInfoReturnable<Boolean> cir) {
+        if (!cavebiomes$usesExtendedRange()) return;
         int y = pos.getY();
         if (y >= 0 && y < 256) {
             return;
@@ -226,6 +246,7 @@ public abstract class MixinWorld {
             remap = false)
     private void cavebiomes$canBlockFreezeBody(BlockPos pos, boolean noWaterAdjacent,
             CallbackInfoReturnable<Boolean> cir) {
+        if (!cavebiomes$usesExtendedRange()) return;
         int y = pos.getY();
         if (y >= 0 && y < 256) {
             return;

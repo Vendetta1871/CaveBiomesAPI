@@ -2,6 +2,8 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.command.CommandFill;
+import net.minecraft.command.ICommandSender;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.math.BlockPos;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -14,13 +16,15 @@ import org.spongepowered.asm.mixin.injection.Slice;
 public abstract class MixinCommandFill {
 
     @Unique
-    private static int cavebiomes$relativeToMinimum(int worldY) {
-        return worldY - WorldHeightAPI.getMinY();
+    private static int cavebiomes$relativeToMinimum(int worldY, ICommandSender sender) {
+        return WorldHeightAPI.usesExtendedHeight(sender.getEntityWorld())
+                ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Unique
-    private static int cavebiomes$relativeToVanillaMaximum(int worldY) {
-        return worldY - WorldHeightAPI.getMaxY() + 256;
+    private static int cavebiomes$relativeToVanillaMaximum(int worldY, ICommandSender sender) {
+        return WorldHeightAPI.usesExtendedHeight(sender.getEntityWorld())
+                ? worldY - WorldHeightAPI.getMaxY() + 256 : worldY;
     }
 
     @Redirect(
@@ -33,8 +37,9 @@ public abstract class MixinCommandFill {
                     target = "Lnet/minecraft/util/math/BlockPos;getY()I", ordinal = 0),
             require = 1,
             allow = 1)
-    private int cavebiomes$minimumVolumeY(BlockPos pos) {
-        return cavebiomes$relativeToMinimum(pos.getY());
+    private int cavebiomes$minimumVolumeY(BlockPos pos, MinecraftServer server,
+            ICommandSender sender, String[] args) {
+        return cavebiomes$relativeToMinimum(pos.getY(), sender);
     }
 
     @Redirect(
@@ -47,7 +52,8 @@ public abstract class MixinCommandFill {
                     target = "Lnet/minecraft/util/math/BlockPos;getY()I", ordinal = 1),
             require = 1,
             allow = 1)
-    private int cavebiomes$maximumVolumeY(BlockPos pos) {
-        return cavebiomes$relativeToVanillaMaximum(pos.getY());
+    private int cavebiomes$maximumVolumeY(BlockPos pos, MinecraftServer server,
+            ICommandSender sender, String[] args) {
+        return cavebiomes$relativeToVanillaMaximum(pos.getY(), sender);
     }
 }

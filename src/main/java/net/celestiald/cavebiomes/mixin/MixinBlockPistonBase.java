@@ -2,7 +2,10 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.block.BlockPistonBase;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -14,8 +17,9 @@ import org.spongepowered.asm.mixin.injection.Slice;
 public abstract class MixinBlockPistonBase {
 
     @Unique
-    private static int cavebiomes$relativeToMinimum(int worldY) {
-        return worldY - WorldHeightAPI.getMinY();
+    private static int cavebiomes$relativeToMinimum(int worldY, World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
+                ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Redirect(
@@ -29,8 +33,10 @@ public abstract class MixinBlockPistonBase {
                     target = "Lnet/minecraft/util/math/BlockPos;getY()I", ordinal = 0),
             require = 1,
             allow = 1)
-    private static int cavebiomes$minimumPushY(BlockPos pos) {
-        return cavebiomes$relativeToMinimum(pos.getY());
+    private static int cavebiomes$minimumPushY(BlockPos queriedPos, IBlockState state,
+            World world, BlockPos blockPos, EnumFacing movement, boolean destroyBlocks,
+            EnumFacing pistonFacing) {
+        return cavebiomes$relativeToMinimum(queriedPos.getY(), world);
     }
 
     @Redirect(
@@ -44,7 +50,9 @@ public abstract class MixinBlockPistonBase {
                     target = "Lnet/minecraft/util/math/BlockPos;getY()I", ordinal = 1),
             require = 1,
             allow = 1)
-    private static int cavebiomes$downwardPushY(BlockPos pos) {
-        return cavebiomes$relativeToMinimum(pos.getY());
+    private static int cavebiomes$downwardPushY(BlockPos queriedPos, IBlockState state,
+            World world, BlockPos blockPos, EnumFacing movement, boolean destroyBlocks,
+            EnumFacing pistonFacing) {
+        return cavebiomes$relativeToMinimum(queriedPos.getY(), world);
     }
 }

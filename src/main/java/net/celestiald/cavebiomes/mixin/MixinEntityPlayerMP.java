@@ -13,8 +13,8 @@ public abstract class MixinEntityPlayerMP {
 
     @Unique
     private static double cavebiomes$relativeToConfiguredMaximum(double worldY,
-            int dimension) {
-        return dimension == 0
+            net.minecraft.world.World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
                 ? worldY - WorldHeightAPI.getMaxY() + 256.0D
                 : worldY;
     }
@@ -27,7 +27,6 @@ public abstract class MixinEntityPlayerMP {
             require = 1,
             allow = 1)
     private double cavebiomes$initialSpawnCollisionCeiling(EntityPlayerMP player) {
-        return cavebiomes$relativeToConfiguredMaximum(
-                player.posY, player.dimension);
+        return cavebiomes$relativeToConfiguredMaximum(player.posY, player.world);
     }
 }
