@@ -22,6 +22,10 @@ public final class PopulationRegionScheduler {
 
     public static boolean populateLoadedRegions(IChunkProvider provider, IChunkGenerator generator,
             int loadedChunkX, int loadedChunkZ) {
+        // provideChunk() re-enters Chunk.populate(); wait until the outer preparation is complete.
+        if (Boolean.TRUE.equals(PREPARING_DETACHED_REGION.get())) {
+            return generator instanceof IExtendedPopulationGenerator;
+        }
         prepareDetachedRegion(provider, generator, loadedChunkX, loadedChunkZ);
         return populateLoadedRegions(loadedChunkX, loadedChunkZ, generator,
                 new LoadedChunkAccess<Chunk>() {
@@ -70,6 +74,16 @@ public final class PopulationRegionScheduler {
                     int neighborZ = chunkZ + offsetZ;
                     if (provider.getLoadedChunk(neighborX, neighborZ) == null) {
                         provider.provideChunk(neighborX, neighborZ);
+                    }
+                }
+            }
+            // Pregenerators can put chunks in the provider map without running their load lifecycle.
+            for (int offsetX = -radius; offsetX <= radius; ++offsetX) {
+                for (int offsetZ = -radius; offsetZ <= radius; ++offsetZ) {
+                    Chunk neighbor = provider.getLoadedChunk(
+                            chunkX + offsetX, chunkZ + offsetZ);
+                    if (neighbor != null && !neighbor.isLoaded()) {
+                        neighbor.onLoad();
                     }
                 }
             }
