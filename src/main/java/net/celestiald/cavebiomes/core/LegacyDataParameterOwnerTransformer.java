@@ -21,7 +21,13 @@ public final class LegacyDataParameterOwnerTransformer implements IClassTransfor
                     "erebus/entity/EntityJumpingSpider", 1),
             new Patch("net.daveyx0.multimob.entity.EntityMMFlyingMob",
                     "net/daveyx0/multimob/entity/EntityMMBird",
-                    "net/daveyx0/multimob/entity/EntityMMFlyingMob", 1)
+                    "net/daveyx0/multimob/entity/EntityMMFlyingMob", 1),
+            new Patch("com.lycanitesmobs.core.entity.AgeableCreatureEntity",
+                    "com/lycanitesmobs/core/entity/BaseCreatureEntity",
+                    "com/lycanitesmobs/core/entity/AgeableCreatureEntity", 2),
+            new Patch("com.lycanitesmobs.core.entity.TameableCreatureEntity",
+                    "com/lycanitesmobs/core/entity/BaseCreatureEntity",
+                    "com/lycanitesmobs/core/entity/TameableCreatureEntity", 4)
     };
 
     @Override
