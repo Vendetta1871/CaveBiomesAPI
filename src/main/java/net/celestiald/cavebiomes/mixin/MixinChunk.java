@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.celestiald.cavebiomes.api.IExtendedPopulationGenerator;
 import net.celestiald.cavebiomes.api.IWrappedWorldType;
 import net.celestiald.cavebiomes.world.population.ExtendedChunkPopulationAccess;
 import net.celestiald.cavebiomes.world.population.PopulationRegionScheduler;
@@ -177,12 +178,24 @@ public abstract class MixinChunk implements ExtendedChunkPopulationAccess {
 
     @Inject(
             method = "populate(Lnet/minecraft/world/chunk/IChunkProvider;Lnet/minecraft/world/gen/IChunkGenerator;)V",
-            at = @At("HEAD"), cancellable = true, require = 1, allow = 1)
+            at = @At("HEAD"), require = 1, allow = 1)
     private void cavebiomes$populateLoadedRegion(IChunkProvider provider,
             IChunkGenerator generator, CallbackInfo ci) {
-        if (PopulationRegionScheduler.populateLoadedRegions(
-                provider, generator, this.x, this.z)) {
-            ci.cancel();
+        PopulationRegionScheduler.populateLoadedRegions(
+                provider, generator, this.x, this.z);
+    }
+
+    @Redirect(
+            method = "populate(Lnet/minecraft/world/chunk/IChunkProvider;Lnet/minecraft/world/gen/IChunkGenerator;)V",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/world/chunk/Chunk;populate(Lnet/minecraft/world/gen/IChunkGenerator;)V"),
+            require = 4,
+            allow = 4)
+    private void cavebiomes$dispatchPopulation(Chunk candidate,
+            IChunkGenerator generator) {
+        if (!(generator instanceof IExtendedPopulationGenerator)) {
+            ((ExtendedChunkPopulationAccess) (Object) candidate)
+                    .cavebiomes$populate(generator);
         }
     }
 
