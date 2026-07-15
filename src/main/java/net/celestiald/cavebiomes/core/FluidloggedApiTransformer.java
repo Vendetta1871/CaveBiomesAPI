@@ -25,6 +25,10 @@ public final class FluidloggedApiTransformer implements IClassTransformer {
             "git.jbredwards.fluidlogged_api.mod.common.message.SMessageSyncFluidStates";
     private static final String EVENT_HANDLER =
             "git.jbredwards.fluidlogged_api.mod.common.EventHandler";
+    private static final String FLUID_STATE =
+            "git.jbredwards.fluidlogged_api.api.util.FluidState";
+    private static final String FLUID_UTILS_INTERNAL =
+            "git/jbredwards/fluidlogged_api/api/util/FluidloggedUtils";
     private static final String CONTAINER_INTERNAL =
             "git/jbredwards/fluidlogged_api/api/capability/IFluidStateContainer";
     private static final String COMPAT =
@@ -40,7 +44,8 @@ public final class FluidloggedApiTransformer implements IClassTransformer {
         new ClassReader(basicClass).accept(node, 0);
         if (CAPABILITY.equals(target)) transformCapability(node);
         else if (MESSAGE.equals(target)) transformMessage(node);
-        else transformEventHandler(node);
+        else if (EVENT_HANDLER.equals(target)) transformEventHandler(node);
+        else transformFluidState(node);
 
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
@@ -48,10 +53,42 @@ public final class FluidloggedApiTransformer implements IClassTransformer {
     }
 
     private static String target(String name, String transformedName) {
-        for (String candidate : new String[]{CAPABILITY, MESSAGE, EVENT_HANDLER}) {
+        for (String candidate : new String[]{CAPABILITY, MESSAGE, EVENT_HANDLER, FLUID_STATE}) {
             if (candidate.equals(name) || candidate.equals(transformedName)) return candidate;
         }
         return null;
+    }
+
+    private static void transformFluidState(ClassNode node) {
+        MethodNode factory = uniqueMethod(node, "of",
+                "(Lnet/minecraft/block/state/IBlockState;)"
+                        + "Lgit/jbredwards/fluidlogged_api/api/util/FluidState;");
+        int guarded = 0;
+        for (AbstractInsnNode instruction : factory.instructions.toArray()) {
+            if (!(instruction instanceof MethodInsnNode)) continue;
+            MethodInsnNode method = (MethodInsnNode) instruction;
+            if (method.getOpcode() != Opcodes.INVOKESTATIC
+                    || !FLUID_UTILS_INTERNAL.equals(method.owner)
+                    || !"getFluidFromState".equals(method.name)
+                    || !"(Lnet/minecraft/block/state/IBlockState;)"
+                    .concat("Lnet/minecraftforge/fluids/Fluid;").equals(method.desc)) {
+                continue;
+            }
+
+            AbstractInsnNode stateLoad = previousReal(method);
+            if (stateLoad.getOpcode() != Opcodes.ALOAD) {
+                throw failure("FluidState.of", "unexpected fluid-state source");
+            }
+            factory.instructions.insert(method, call("validateFluidState",
+                    "(Lnet/minecraftforge/fluids/Fluid;Lnet/minecraft/block/state/IBlockState;)"
+                            + "Lnet/minecraftforge/fluids/Fluid;"));
+            factory.instructions.insert(method,
+                    new VarInsnNode(Opcodes.ALOAD, ((VarInsnNode) stateLoad).var));
+            guarded++;
+        }
+        if (guarded != 1) {
+            throw failure("FluidState.of", "expected one fluid-state factory call, found " + guarded);
+        }
     }
 
     private static void transformCapability(ClassNode node) {

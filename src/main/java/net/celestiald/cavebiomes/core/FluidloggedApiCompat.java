@@ -1,6 +1,8 @@
 package net.celestiald.cavebiomes.core;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.minecraft.block.BlockLiquid;
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
@@ -8,6 +10,7 @@ import net.minecraft.world.chunk.Chunk;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
 import net.minecraftforge.event.world.ChunkWatchEvent;
+import net.minecraftforge.fluids.Fluid;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -38,6 +41,16 @@ public final class FluidloggedApiCompat {
             Collections.synchronizedMap(new WeakHashMap<>());
 
     private FluidloggedApiCompat() {}
+
+    /**
+     * Fluidlogged API treats every water- or lava-material block as a fluid, but its level
+     * lookup requires the vanilla liquid level property. Reject incompatible block states at
+     * the factory boundary so render and flow code sees them as ordinary blocks instead.
+    */
+    public static Fluid validateFluidState(Fluid fluid, IBlockState state) {
+        if (fluid == null || state == null) return null;
+        return state.getPropertyKeys().contains(BlockLiquid.LEVEL) ? fluid : null;
+    }
 
     /** Returns an independent 256-block container for the requested world-Y page. */
     public static Object getContainer(Object owner, int worldY) {
