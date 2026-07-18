@@ -16,14 +16,26 @@ public abstract class MixinEntityFallingBlock {
     @Unique
     private int cavebiomes$relativeToMinimum(int worldY) {
         EntityFallingBlock entity = (EntityFallingBlock) (Object) this;
-        return WorldHeightAPI.usesExtendedHeight(entity.world)
+        return cavebiomes$relativeToMinimum(worldY, entity.world);
+    }
+
+    @Unique
+    private static int cavebiomes$relativeToMinimum(int worldY,
+            net.minecraft.world.World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
                 ? worldY - WorldHeightAPI.getMinY() : worldY;
     }
 
     @Unique
     private int cavebiomes$relativeToVanillaMaximum(int worldY) {
         EntityFallingBlock entity = (EntityFallingBlock) (Object) this;
-        return WorldHeightAPI.usesExtendedHeight(entity.world)
+        return cavebiomes$relativeToVanillaMaximum(worldY, entity.world);
+    }
+
+    @Unique
+    private static int cavebiomes$relativeToVanillaMaximum(int worldY,
+            net.minecraft.world.World world) {
+        return WorldHeightAPI.usesExtendedHeight(world)
                 ? worldY - WorldHeightAPI.getMaxY() + 256 : worldY;
     }
 

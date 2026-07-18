@@ -1,6 +1,8 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.minecraft.world.World;
+import net.minecraft.world.WorldServer;
 import org.junit.After;
 import org.junit.Test;
 import org.spongepowered.asm.mixin.injection.At;
@@ -172,12 +174,17 @@ public class PortalHeightMixinContractTest {
 
     private static int relativeY(Class<?> owner, int y, int dimension) {
         try {
+            boolean serverSide = owner == MixinTeleporter.class;
             Method method = owner.getDeclaredMethod(
-                    "cavebiomes$relativeToPortalFloor", int.class, int.class);
+                    "cavebiomes$relativeToPortalFloor", int.class,
+                    serverSide ? WorldServer.class : World.class);
             assertTrue(Modifier.isPrivate(method.getModifiers()));
             assertTrue(Modifier.isStatic(method.getModifiers()));
             method.setAccessible(true);
-            return (Integer) method.invoke(null, y, dimension);
+            Object world = serverSide
+                    ? TestWorlds.serverForDimension(dimension)
+                    : TestWorlds.forDimension(dimension);
+            return (Integer) method.invoke(null, y, world);
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }
@@ -186,11 +193,12 @@ public class PortalHeightMixinContractTest {
     private static int portalFloor(int dimension) {
         try {
             Method method = MixinTeleporter.class.getDeclaredMethod(
-                    "cavebiomes$portalFloor", int.class);
+                    "cavebiomes$portalFloor", WorldServer.class);
             assertTrue(Modifier.isPrivate(method.getModifiers()));
             assertTrue(Modifier.isStatic(method.getModifiers()));
             method.setAccessible(true);
-            return (Integer) method.invoke(null, dimension);
+            return (Integer) method.invoke(null,
+                    TestWorlds.serverForDimension(dimension));
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }

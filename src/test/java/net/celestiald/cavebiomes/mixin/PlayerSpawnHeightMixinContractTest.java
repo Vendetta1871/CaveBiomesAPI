@@ -2,6 +2,7 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.world.World;
 import org.junit.After;
 import org.junit.Test;
 import org.spongepowered.asm.mixin.injection.At;
@@ -105,11 +106,12 @@ public class PlayerSpawnHeightMixinContractTest {
     private static double relativeY(Class<?> mixin, double worldY, int dimension) {
         try {
             Method method = mixin.getDeclaredMethod(
-                    "cavebiomes$relativeToConfiguredMaximum", double.class, int.class);
+                    "cavebiomes$relativeToConfiguredMaximum", double.class, World.class);
             assertTrue(Modifier.isPrivate(method.getModifiers()));
             assertTrue(Modifier.isStatic(method.getModifiers()));
             method.setAccessible(true);
-            return (Double) method.invoke(null, worldY, dimension);
+            return (Double) method.invoke(null, worldY,
+                    TestWorlds.forDimension(dimension));
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }

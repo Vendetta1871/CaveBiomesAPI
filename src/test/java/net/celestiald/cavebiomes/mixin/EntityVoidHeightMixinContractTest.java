@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.minecraft.world.World;
 import org.junit.After;
 import org.junit.Test;
 import org.spongepowered.asm.mixin.injection.Constant;
@@ -108,11 +109,12 @@ public class EntityVoidHeightMixinContractTest {
     private static double threshold(Class<?> owner, int dimension) {
         try {
             Method method = owner.getDeclaredMethod(
-                    "cavebiomes$thresholdForDimension", double.class, int.class);
+                    "cavebiomes$thresholdForWorld", double.class, World.class);
             assertTrue(Modifier.isPrivate(method.getModifiers()));
             assertTrue(Modifier.isStatic(method.getModifiers()));
             method.setAccessible(true);
-            return (Double) method.invoke(null, VANILLA_THRESHOLD, dimension);
+            return (Double) method.invoke(null, VANILLA_THRESHOLD,
+                    TestWorlds.forDimension(dimension));
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }

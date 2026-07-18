@@ -53,7 +53,9 @@ public class PopulationRegionMixinContractTest {
                 "populate(Lnet/minecraft/world/chunk/IChunkProvider;Lnet/minecraft/world/gen/IChunkGenerator;)V"
         }, inject.method());
         assertEquals("HEAD", inject.at()[0].value());
-        assertTrue(inject.cancellable());
+        // The hook only schedules loaded detached regions; the vanilla
+        // lifecycle deliberately continues (no cancellation).
+        assertFalse(inject.cancellable());
         assertEquals(1, inject.require());
         assertEquals(1, inject.allow());
     }

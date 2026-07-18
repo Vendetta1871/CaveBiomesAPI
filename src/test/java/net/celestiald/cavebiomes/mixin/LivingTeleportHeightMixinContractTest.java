@@ -2,6 +2,7 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import org.junit.After;
 import org.junit.Test;
 import org.spongepowered.asm.mixin.injection.At;
@@ -99,11 +100,12 @@ public class LivingTeleportHeightMixinContractTest {
     private static int relativeY(int worldY, int dimension) {
         try {
             Method method = MixinEntityLivingBase.class.getDeclaredMethod(
-                    "cavebiomes$relativeToTeleportFloor", int.class, int.class);
+                    "cavebiomes$relativeToTeleportFloor", int.class, World.class);
             assertTrue(Modifier.isPrivate(method.getModifiers()));
             assertTrue(Modifier.isStatic(method.getModifiers()));
             method.setAccessible(true);
-            return (Integer) method.invoke(null, worldY, dimension);
+            return (Integer) method.invoke(null, worldY,
+                    TestWorlds.forDimension(dimension));
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }

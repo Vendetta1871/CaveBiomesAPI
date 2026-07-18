@@ -54,9 +54,15 @@ public class CommandHeightMixinContractTest {
         ICommandSender sender = (ICommandSender) Proxy.newProxyInstance(
                 ICommandSender.class.getClassLoader(),
                 new Class<?>[]{ICommandSender.class},
-                (proxy, method, args) -> method.getName().equals("getPosition")
-                        ? BlockPos.ORIGIN
-                        : defaultValue(method.getReturnType()));
+                (proxy, method, args) -> {
+                    if (method.getName().equals("getPosition")) {
+                        return BlockPos.ORIGIN;
+                    }
+                    if (method.getName().equals("getEntityWorld")) {
+                        return TestWorlds.extendedOverworld();
+                    }
+                    return defaultValue(method.getReturnType());
+                });
         CallbackInfoReturnable<BlockPos> callback =
                 new CallbackInfoReturnable<>("parseBlockPos", true);
         handler.invoke(null, sender, coordinates, 0, false, callback);

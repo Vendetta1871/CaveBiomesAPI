@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.minecraft.command.ICommandSender;
 import org.junit.After;
 import org.junit.Test;
 import org.objectweb.asm.Opcodes;
@@ -96,11 +97,12 @@ public class CommandVolumeHeightMixinContractTest {
 
     private static int invokeAdapter(Class<?> owner, String name, int y) {
         try {
-            Method method = owner.getDeclaredMethod(name, int.class);
+            Method method = owner.getDeclaredMethod(name, int.class, ICommandSender.class);
             assertTrue(Modifier.isPrivate(method.getModifiers()));
             assertTrue(Modifier.isStatic(method.getModifiers()));
             method.setAccessible(true);
-            return (Integer) method.invoke(null, y);
+            return (Integer) method.invoke(null, y,
+                    TestWorlds.sender(TestWorlds.extendedOverworld()));
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }

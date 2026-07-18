@@ -2,6 +2,8 @@ package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
+import net.minecraft.world.WorldServer;
 import org.junit.After;
 import org.junit.Test;
 import org.spongepowered.asm.mixin.injection.Constant;
@@ -124,22 +126,50 @@ public class SurfaceQueryHeightMixinContractTest {
     }
 
     private static boolean usesExtendedRange(Class<?> owner, int dimension) {
+        World world = TestWorlds.forDimension(dimension);
+        if (owner == MixinWorld.class) {
+            try {
+                Method method = MixinWorld.class.getDeclaredMethod(
+                        "cavebiomes$usesExtendedSurfaceRange", World.class);
+                assertTrue(Modifier.isPrivate(method.getModifiers()));
+                assertTrue(Modifier.isStatic(method.getModifiers()));
+                method.setAccessible(true);
+                return (Boolean) method.invoke(null, world);
+            } catch (ReflectiveOperationException exception) {
+                throw new AssertionError(exception);
+            }
+        }
+        // MixinChunk folds the same guard into its precipitation handler:
+        // the world-driven instance check plus the inline minY < 0 condition.
+        return chunkUsesExtendedHeight(world) && WorldHeightAPI.getMinY() < 0;
+    }
+
+    private static boolean chunkUsesExtendedHeight(World world) {
         try {
-            Method method = owner.getDeclaredMethod(
-                    "cavebiomes$usesExtendedSurfaceRange", int.class);
+            Method method = MixinChunk.class.getDeclaredMethod(
+                    "cavebiomes$usesExtendedHeight");
             assertTrue(Modifier.isPrivate(method.getModifiers()));
-            assertTrue(Modifier.isStatic(method.getModifiers()));
+            assertFalse(Modifier.isStatic(method.getModifiers()));
             method.setAccessible(true);
-            return (Boolean) method.invoke(null, dimension);
+            return (Boolean) method.invoke(TestWorlds.chunkFor(world));
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }
     }
 
     private static int precipitationSentinel(int vanillaSentinel, int dimension) {
-        return invokeInt(MixinWorldServer.class,
-                "cavebiomes$precipitationSentinelForDimension",
-                new Class<?>[]{int.class, int.class}, vanillaSentinel, dimension);
+        try {
+            Method method = MixinWorldServer.class.getDeclaredMethod(
+                    "cavebiomes$precipitationSentinelForWorld",
+                    int.class, WorldServer.class);
+            assertTrue(Modifier.isPrivate(method.getModifiers()));
+            assertTrue(Modifier.isStatic(method.getModifiers()));
+            method.setAccessible(true);
+            return (Integer) method.invoke(null, vanillaSentinel,
+                    TestWorlds.serverForDimension(dimension));
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     private static int invokeInt(Class<?> owner, String name, Class<?>[] parameters,

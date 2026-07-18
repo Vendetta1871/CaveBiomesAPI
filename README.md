@@ -14,7 +14,7 @@ By default the mod is fully transparent — no registrations means byte-for-byte
 
 ## Requirements
 
-* Minecraft 1.12.2 / Forge 14.23.5.2864
+* Minecraft 1.12.2 / Forge 14.23.5.2860 or newer
 * **[MixinBootstrap](https://github.com/LXGaming/MixinBootstrap/releases/tag/v1.1.0)**
   (runtime launch library; it is not an FML mod and has no Forge mod id)
 

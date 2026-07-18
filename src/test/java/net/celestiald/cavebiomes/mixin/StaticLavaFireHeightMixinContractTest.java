@@ -125,11 +125,12 @@ public class StaticLavaFireHeightMixinContractTest {
     private static int invokeTranslation(String name, int worldY, int dimension) {
         try {
             Method method = MixinBlockStaticLiquid.class.getDeclaredMethod(
-                    name, int.class, int.class);
+                    name, int.class, World.class);
             assertTrue(Modifier.isPrivate(method.getModifiers()));
             assertTrue(Modifier.isStatic(method.getModifiers()));
             method.setAccessible(true);
-            return (Integer) method.invoke(null, worldY, dimension);
+            return (Integer) method.invoke(null, worldY,
+                    TestWorlds.forDimension(dimension));
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }
@@ -155,7 +156,14 @@ public class StaticLavaFireHeightMixinContractTest {
                 BlockPos.class, World.class, BlockPos.class);
         assertPrivateInstanceHandler(method);
         Redirect redirect = method.getAnnotation(Redirect.class);
-        assertRedirect(redirect, "getCanBlockBurn", yOrdinal);
+        // Fluidlogged API replaces getCanBlockBurn, so the burn redirects must
+        // tolerate a missing target instead of requiring it.
+        assertArrayEquals(new String[]{"getCanBlockBurn"}, redirect.method());
+        assertEquals(0, redirect.require());
+        assertEquals(0, redirect.expect());
+        assertEquals(1, redirect.allow());
+        assertAt(redirect.at(), "INVOKE", BLOCK_POS_Y, yOrdinal);
+        assertTrue(redirect.at().remap());
         assertAt(redirect.slice().from(), "HEAD", "", -1);
         assertAt(redirect.slice().to(), "TAIL", "", -1);
     }

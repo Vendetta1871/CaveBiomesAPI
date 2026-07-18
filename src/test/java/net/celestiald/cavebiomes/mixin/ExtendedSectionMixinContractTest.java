@@ -32,20 +32,17 @@ public class ExtendedSectionMixinContractTest {
         int sectionCount = WorldHeightAPI.getSectionCount();
 
         for (int sectionY = -4; sectionY <= 19; ++sectionY) {
-            int storageIndex = invokeInt(MixinChunk.class,
-                    "cavebiomes$entityStorageIndex", new Class<?>[]{int.class, int.class},
-                    sectionY, sectionCount);
+            int storageIndex = invokeChunkInt(
+                    "cavebiomes$entityStorageIndex", sectionY, sectionCount);
             assertEquals(sectionY + 4, storageIndex);
             assertEquals(sectionY, invokeInt(MixinChunk.class,
                     "cavebiomes$trackedEntitySectionY", new Class<?>[]{int.class}, storageIndex));
         }
 
-        assertEquals(0, invokeInt(MixinChunk.class,
-                "cavebiomes$entityStorageIndex", new Class<?>[]{int.class, int.class},
-                -5, sectionCount));
-        assertEquals(23, invokeInt(MixinChunk.class,
-                "cavebiomes$entityStorageIndex", new Class<?>[]{int.class, int.class},
-                20, sectionCount));
+        assertEquals(0, invokeChunkInt(
+                "cavebiomes$entityStorageIndex", -5, sectionCount));
+        assertEquals(23, invokeChunkInt(
+                "cavebiomes$entityStorageIndex", 20, sectionCount));
         assertNotNull(MixinChunk.class.getDeclaredMethod(
                 "removeEntityAtIndex", Entity.class, int.class));
     }
@@ -54,10 +51,10 @@ public class ExtendedSectionMixinContractTest {
     public void directChunkWritesRejectCoordinatesOutsideTheFiniteRange()
             throws ReflectiveOperationException {
         WorldHeightAPI.configureLocalRange(-64, 320);
-        assertFalse(invokeBoolean(MixinChunk.class, "cavebiomes$isBlockYInRange", -65));
-        assertTrue(invokeBoolean(MixinChunk.class, "cavebiomes$isBlockYInRange", -64));
-        assertTrue(invokeBoolean(MixinChunk.class, "cavebiomes$isBlockYInRange", 319));
-        assertFalse(invokeBoolean(MixinChunk.class, "cavebiomes$isBlockYInRange", 320));
+        assertFalse(invokeChunkBoolean("cavebiomes$isBlockYInRange", -65));
+        assertTrue(invokeChunkBoolean("cavebiomes$isBlockYInRange", -64));
+        assertTrue(invokeChunkBoolean("cavebiomes$isBlockYInRange", 319));
+        assertFalse(invokeChunkBoolean("cavebiomes$isBlockYInRange", 320));
     }
 
     @Test
@@ -132,16 +129,12 @@ public class ExtendedSectionMixinContractTest {
         assertEquals(319, invokeInt(MixinChunk.class, "cavebiomes$relightWorldY",
                 new Class<?>[]{int.class, int.class}, 23, 15));
 
-        assertFalse(invokeBoolean(MixinChunk.class,
-                "cavebiomes$isAboveMinimumBuildHeight", -64));
-        assertTrue(invokeBoolean(MixinChunk.class,
-                "cavebiomes$isAboveMinimumBuildHeight", -63));
+        assertFalse(invokeChunkBoolean("cavebiomes$isAboveMinimumBuildHeight", -64));
+        assertTrue(invokeChunkBoolean("cavebiomes$isAboveMinimumBuildHeight", -63));
 
         WorldHeightAPI.configureLocalRange(0, 256);
-        assertFalse(invokeBoolean(MixinChunk.class,
-                "cavebiomes$isAboveMinimumBuildHeight", 0));
-        assertTrue(invokeBoolean(MixinChunk.class,
-                "cavebiomes$isAboveMinimumBuildHeight", 1));
+        assertFalse(invokeChunkBoolean("cavebiomes$isAboveMinimumBuildHeight", 0));
+        assertTrue(invokeChunkBoolean("cavebiomes$isAboveMinimumBuildHeight", 1));
         assertEquals(4096, invokeInt(MixinChunk.class, "cavebiomes$relightQueueLimit",
                 new Class<?>[]{int.class}, 16));
     }
@@ -165,13 +158,28 @@ public class ExtendedSectionMixinContractTest {
                 "cavebiomes$normalizedTileEntityY", new Class<?>[]{int.class}, worldY) >> 4;
     }
 
-    private static boolean invokeBoolean(Class<?> owner, String name, int value)
+    private static boolean invokeChunkBoolean(String name, int value)
             throws ReflectiveOperationException {
-        Method method = owner.getDeclaredMethod(name, int.class);
-        assertTrue(name + " must be private for Mixin 0.8", Modifier.isPrivate(method.getModifiers()));
-        assertTrue(name + " must remain static", Modifier.isStatic(method.getModifiers()));
+        Method method = MixinChunk.class.getDeclaredMethod(name, int.class);
+        assertTrue(name + " must be private for Mixin 0.8",
+                Modifier.isPrivate(method.getModifiers()));
+        assertFalse(name + " is a world-driven per-chunk instance check",
+                Modifier.isStatic(method.getModifiers()));
         method.setAccessible(true);
-        return (Boolean) method.invoke(null, value);
+        return (Boolean) method.invoke(
+                TestWorlds.chunkFor(TestWorlds.extendedOverworld()), value);
+    }
+
+    private static int invokeChunkInt(String name, int first, int second)
+            throws ReflectiveOperationException {
+        Method method = MixinChunk.class.getDeclaredMethod(name, int.class, int.class);
+        assertTrue(name + " must be private for Mixin 0.8",
+                Modifier.isPrivate(method.getModifiers()));
+        assertFalse(name + " is a world-driven per-chunk instance check",
+                Modifier.isStatic(method.getModifiers()));
+        method.setAccessible(true);
+        return (Integer) method.invoke(
+                TestWorlds.chunkFor(TestWorlds.extendedOverworld()), first, second);
     }
 
     private static int invokeInt(Class<?> owner, String name, Class<?>[] parameterTypes,

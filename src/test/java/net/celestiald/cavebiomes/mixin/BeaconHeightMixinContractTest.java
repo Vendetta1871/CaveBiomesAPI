@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes.mixin;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.minecraft.world.World;
 import org.junit.After;
 import org.junit.Test;
 import org.objectweb.asm.Opcodes;
@@ -128,22 +129,23 @@ public class BeaconHeightMixinContractTest {
     }
 
     private static int beamCeiling(int vanillaCeiling, int dimension) {
-        return invokeHelper("cavebiomes$beamCeilingForDimension",
+        return invokeHelper("cavebiomes$beamCeilingForWorld",
                 vanillaCeiling, dimension);
     }
 
     private static int baseFloor(int vanillaFloor, int dimension) {
-        return invokeHelper("cavebiomes$baseFloorForDimension", vanillaFloor, dimension);
+        return invokeHelper("cavebiomes$baseFloorForWorld", vanillaFloor, dimension);
     }
 
     private static int invokeHelper(String name, int vanillaValue, int dimension) {
         try {
             Method method = MixinTileEntityBeacon.class.getDeclaredMethod(
-                    name, int.class, int.class);
+                    name, int.class, World.class);
             assertTrue(Modifier.isPrivate(method.getModifiers()));
             assertTrue(Modifier.isStatic(method.getModifiers()));
             method.setAccessible(true);
-            return (Integer) method.invoke(null, vanillaValue, dimension);
+            return (Integer) method.invoke(null, vanillaValue,
+                    TestWorlds.forDimension(dimension));
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError(exception);
         }
