@@ -47,8 +47,9 @@ public abstract class MixinViewFrustum implements IViewFrustumExt {
         renderChunk.setPosition(x, y + WorldHeightAPI.getMinY(), z);
     }
 
-    // Public bridge so MixinRenderGlobal (different package) can reach the
-    // protected getRenderChunk after this mixin is applied. See IViewFrustumExt.
+    // Public bridge so MixinRenderGlobal (different package) can reach
+    // getRenderChunk after this mixin is applied. See IViewFrustumExt.
+    // The overwrite itself is public because OptiFine widens the target.
     @Override
     public RenderChunk cavebiomes$getRenderChunk(BlockPos pos) {
         return this.getRenderChunk(pos);
@@ -56,7 +57,7 @@ public abstract class MixinViewFrustum implements IViewFrustumExt {
 
     @Nullable
     @Overwrite
-    protected RenderChunk getRenderChunk(BlockPos pos) {
+    public RenderChunk getRenderChunk(BlockPos pos) {
         int i = MathHelper.intFloorDiv(pos.getX(), 16);
         int j = MathHelper.intFloorDiv(pos.getY(), 16) - WorldHeightAPI.getMinSection();
         int k = MathHelper.intFloorDiv(pos.getZ(), 16);
