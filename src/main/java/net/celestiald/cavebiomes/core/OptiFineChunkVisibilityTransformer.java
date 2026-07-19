@@ -29,12 +29,16 @@ public final class OptiFineChunkVisibilityTransformer implements IClassTransform
         new ClassReader(basicClass).accept(node, 0);
         MethodNode method = uniqueMethod(node, "getMaxChunkY");
         List<InsnNode> shifts = integerShifts(method, Opcodes.ISHR);
-        if (shifts.size() != 4) {
-            throw failure("expected four section shifts in getMaxChunkY, found " + shifts.size());
+        if (shifts.size() == 4) {
+            replaceShift(method, shifts.get(1), "sectionIndex");
+            replaceShift(method, shifts.get(3), "sectionIndex");
+        } else if (shifts.size() == 3) {
+            // HD_U_E3 scans chunk X/Z shifts then a single tile-entity Y shift.
+            replaceEntityYShift(method, shifts.get(2));
+        } else {
+            throw failure("expected three or four section shifts in getMaxChunkY, found "
+                    + shifts.size());
         }
-
-        replaceShift(method, shifts.get(1), "sectionIndex");
-        replaceShift(method, shifts.get(3), "sectionIndex");
 
         List<InsnNode> leftShifts = integerShifts(method, Opcodes.ISHL);
         if (leftShifts.size() != 1) {
@@ -74,6 +78,16 @@ public final class OptiFineChunkVisibilityTransformer implements IClassTransform
             }
         }
         return result;
+    }
+
+    private static void replaceEntityYShift(MethodNode method, InsnNode shift) {
+        AbstractInsnNode shiftAmount = previousRealInstruction(shift);
+        AbstractInsnNode producer = previousRealInstruction(shiftAmount);
+        if (!(producer instanceof MethodInsnNode)
+                || producer.getOpcode() != Opcodes.INVOKEVIRTUAL) {
+            throw failure("a non-entity producer before the single section shift");
+        }
+        replaceShift(method, shift, "sectionIndex");
     }
 
     private static void replaceShift(MethodNode method, InsnNode shift, String apiMethod) {
