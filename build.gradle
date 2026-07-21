@@ -28,6 +28,10 @@ minecraft {
     runDir = 'run'
     mappings = 'snapshot_20171003'
     coreMod = 'net.celestiald.cavebiomes.core.CaveBiomesLoadingPlugin'
+    // Keep @Mod(version) in sync with project.version: FML resolves mod
+    // dependencies against the annotation constant, not mcmod.info.
+    replaceIn 'net/celestiald/cavebiomes/CaveBiomesMod.java'
+    replace '@VERSION@', project.version
 }
 
 repositories {
