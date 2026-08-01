@@ -71,6 +71,16 @@ int maxY = WorldHeightAPI.getMaxY();
 
 The API is **read-only** — height is a world property and cannot be changed at runtime.
 
+### Renderer compatibility
+
+Extended-height rendering is patched for the vanilla renderer, for OptiFine
+(HD_U_E3; other builds are untested), and for **Nothirium** (0.4.x): the
+section grid, section storage lookup, dirty marking, and world-bound face
+culling are all shifted by the configured `minY`. Other mods that replace the
+chunk renderer wholesale need the same treatment — without it their sections
+render `-minY` blocks above their real position (e.g. +64 with the default
+-64..320 range) while world logic stays correct. Open an issue if you hit one.
+
 ---
 
 ### Vertical Biome API

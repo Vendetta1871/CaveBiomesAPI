@@ -1,4 +1,11 @@
 1.12.x Changelog
+1.1.2
+-------
+ - Render extended-height worlds correctly under Nothirium 0.4.x: reroute its
+   section lookup, dirty marking, and world-bound face culling through the
+   configured Y range. Previously every section rendered -minY blocks (64 with
+   the default range) above its real position.
+
 1.1.0
 -------
  - Add world-aware vertical biome providers for seed- and dimension-dependent layers.
