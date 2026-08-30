@@ -5,6 +5,7 @@
   "version": "${version}",
   "mcversion": "${mcversion}",
   "credits": "CelestialD",
+  "logoFile": "icon.png",
   "authorList": ["CelestialD"],
   "dependencies": [],
   "requiredMods": [],
