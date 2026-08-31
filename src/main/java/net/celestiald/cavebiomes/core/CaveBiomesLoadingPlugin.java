@@ -19,6 +19,7 @@ public class CaveBiomesLoadingPlugin implements IFMLLoadingPlugin {
                 OptiFineRenderChunkTransformer.class.getName(),
                 OptiFineChunkVisibilityTransformer.class.getName(),
                 NothiriumRenderTransformer.class.getName(),
+                CeleritasRenderTransformer.class.getName(),
                 LegacyEntityRenderTransformer.class.getName(),
                 LegacyEntityStorageTransformer.class.getName(),
                 LegacyEntityQueryTransformer.class.getName(),

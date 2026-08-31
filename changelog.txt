@@ -1,4 +1,12 @@
 1.12.x Changelog
+1.1.3 (unreleased)
+-------
+ - Render extended-height worlds correctly under Celeritas (2.4.0-dev) and its
+   shader-enabled fork Actinium (alpha-0.0.6): reroute the section-manager
+   bounds, the WorldSlice/ClonedChunkSection storage lookups and the entity
+   culling build heights through the configured Y range, and take over
+   Actinium's Depths Update shim while the height is extended.
+
 1.1.2
 -------
  - Render extended-height worlds correctly under Nothirium 0.4.x: reroute its
