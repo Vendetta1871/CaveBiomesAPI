@@ -1,4 +1,11 @@
 1.12.x Changelog
+1.1.4
+-------
+ - Load alongside mods whose access transformers widen an overwritten method
+   (Fluidlogged API makes Chunk#relightBlock public): overwrites now conform to
+   the target's visibility instead of rejecting MixinChunk, which crashed world
+   generation with "Chunk has 16 sections, expected 24".
+
 1.1.3
 -------
  - Ship a mod icon shown by launchers and the in-game mod list.
