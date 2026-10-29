@@ -1,6 +1,7 @@
 package net.celestiald.cavebiomes;
 
 import net.celestiald.cavebiomes.api.WorldHeightAPI;
+import net.celestiald.cavebiomes.compat.AlfheimConflict;
 import net.celestiald.cavebiomes.config.WorldHeightConfig;
 import net.celestiald.cavebiomes.network.WorldHeightNetwork;
 import net.minecraftforge.fml.common.Mod;
@@ -30,6 +31,7 @@ public class CaveBiomesMod {
         logger = event.getModLog();
         WorldHeightConfig.init(event.getModConfigurationDirectory());
         WorldHeightAPI.freezeRange();
+        AlfheimConflict.haltIfExtendedHeight();
         WorldHeightNetwork.initialize();
         logger.info("World height: Y {} to {}", WorldHeightConfig.minY, WorldHeightConfig.maxY);
     }
