@@ -1,4 +1,13 @@
 1.12.x Changelog
+1.1.5
+-------
+ - Refuse to start next to Alfheim while the world height is extended: Alfheim
+   rewrites Chunk lighting with vanilla 0..256 section indices, which crashed
+   extended worlds on load (ArrayIndexOutOfBoundsException: -1 through a
+   Fluidlogged API light relight) and read light from sections 64 blocks away
+   from the queried position wherever it did not crash. Packs that keep the
+   vanilla height (min_world_y = 0, max_world_y = 256) still load together.
+
 1.1.4
 -------
  - Load alongside mods whose access transformers widen an overwritten method
