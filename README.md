@@ -7,11 +7,11 @@
 
 [github-badge]: https://img.shields.io/badge/GitHub-Source-181717?style=for-the-badge&logo=github&logoColor=white
 [github]: https://github.com/Vendetta1871/CaveBiomesAPI
-[discord-badge]: docs/badges/discord.svg
+[discord-badge]: https://raw.githubusercontent.com/Vendetta1871/CaveBiomesAPI/main/docs/badges/discord.svg
 [discord]: https://discord.gg/gvmeswCQFP
 [modrinth-badge]: https://img.shields.io/badge/Modrinth-Download-00AF5C?style=for-the-badge&logo=modrinth&logoColor=white
 [modrinth]: https://modrinth.com/mod/cavebiomesapi
-[curseforge-badge]: docs/badges/curseforge.svg
+[curseforge-badge]: https://raw.githubusercontent.com/Vendetta1871/CaveBiomesAPI/main/docs/badges/curseforge.svg
 [curseforge]: https://www.curseforge.com/minecraft/mc-mods/cavebiomesapi
 
 **CaveBiomesAPI** is a core/library mod for Minecraft 1.12.2 designed specifically for mod developers. It significantly expands the vanilla world generation capabilities by introducing vertical (3D) biomes and custom world height limits.
@@ -205,4 +205,4 @@ BiomeLayerAPI.clear();        // remove all
 
 ## License
 
-[GNU General Public License v3.0 (GPL-3.0)](LICENSE.txt)
+[GNU General Public License v3.0 (GPL-3.0)](https://github.com/Vendetta1871/CaveBiomesAPI/blob/main/LICENSE.txt)
